@@ -14,7 +14,7 @@ module.exports = {
       name: "gemini-proxy",
       script: "dist/index.js",
       cwd: "/root/Server/gemini-cli-proxy", // Update this path to your project location
-      args: "--oauth-rotation-folder /root/Server/gemini-cli-oauth --port 3030", // Update this path to your OAuth folder
+      args: "--oauth-rotation-folder /root/Server/gemini-cli-oauth --port 3030 --disable-browser-auth", // Update this path to your OAuth folder
       interpreter: "none",
       env: {
         NODE_ENV: "production",
