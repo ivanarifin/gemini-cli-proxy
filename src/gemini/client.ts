@@ -1,9 +1,17 @@
-import {OAuth2Client} from "google-auth-library";
+import { OAuth2Client } from "google-auth-library";
 import * as OpenAI from "../types/openai.js";
 import * as Gemini from "../types/gemini.js";
-import {CODE_ASSIST_API_VERSION, CODE_ASSIST_ENDPOINT, OPENAI_CHAT_COMPLETION_OBJECT} from "../utils/constant.js";
-import {AutoModelSwitchingHelper, type RetryableRequestData} from "./auto-model-switching.js";
-import {getLogger, Logger} from "../utils/logger.js";
+import {
+    CODE_ASSIST_API_VERSION,
+    CODE_ASSIST_ENDPOINT,
+    OPENAI_CHAT_COMPLETION_OBJECT,
+} from "../utils/constant.js";
+import {
+    AutoModelSwitchingHelper,
+    type RetryableRequestData,
+} from "./auto-model-switching.js";
+import { getLogger, Logger } from "../utils/logger.js";
+import { OAuthRotator } from "../utils/oauth-rotator.js";
 import chalk from "chalk";
 
 /**
@@ -30,16 +38,18 @@ export class GeminiApiClient {
     private readonly chatID: string;
     private readonly autoSwitcher: AutoModelSwitchingHelper;
     private readonly logger: Logger;
+    private readonly oauthRotator: OAuthRotator;
 
     constructor(
         private readonly authClient: OAuth2Client,
         private readonly googleCloudProject: string | undefined,
-        private readonly disableAutoModelSwitch: boolean,
+        private readonly disableAutoModelSwitch: boolean
     ) {
         this.googleCloudProject = googleCloudProject;
         this.chatID = `chat-${crypto.randomUUID()}`;
         this.creationTime = Math.floor(Date.now() / 1000);
         this.autoSwitcher = AutoModelSwitchingHelper.getInstance();
+        this.oauthRotator = OAuthRotator.getInstance();
         this.logger = getLogger("GEMINI-CLIENT", chalk.blue);
     }
 
@@ -58,7 +68,7 @@ export class GeminiApiClient {
             const initialProjectId = "default-project";
             const loadResponse = (await this.callEndpoint("loadCodeAssist", {
                 cloudaicompanionProject: initialProjectId,
-                metadata: {duetProject: initialProjectId},
+                metadata: { duetProject: initialProjectId },
             })) as Gemini.ProjectDiscoveryResponse;
 
             if (loadResponse.cloudaicompanionProject) {
@@ -66,7 +76,9 @@ export class GeminiApiClient {
                 return loadResponse.cloudaicompanionProject;
             }
 
-            const defaultTier = loadResponse.allowedTiers?.find((tier) => tier.isDefault);
+            const defaultTier = loadResponse.allowedTiers?.find(
+                (tier) => tier.isDefault
+            );
             const tierId = defaultTier?.id ?? "free-tier";
             const onboardRequest = {
                 tierId,
@@ -74,11 +86,14 @@ export class GeminiApiClient {
             };
 
             // Poll until operation is complete with timeout protection
-            const MAX_RETRIES = 30 ;
+            const MAX_RETRIES = 30;
             let retryCount = 0;
             let lroResponse: Gemini.OnboardUserResponse | undefined;
             while (retryCount < MAX_RETRIES) {
-                lroResponse = (await this.callEndpoint("onboardUser", onboardRequest)) as Gemini.OnboardUserResponse;
+                lroResponse = (await this.callEndpoint(
+                    "onboardUser",
+                    onboardRequest
+                )) as Gemini.OnboardUserResponse;
                 if (lroResponse.done) {
                     break;
                 }
@@ -90,7 +105,9 @@ export class GeminiApiClient {
                 throw new Error("common:errors.geminiCli.onboardingTimeout");
             }
 
-            this.projectId = lroResponse.response?.cloudaicompanionProject?.id ?? initialProjectId;
+            this.projectId =
+                lroResponse.response?.cloudaicompanionProject?.id ??
+                initialProjectId;
             return this.projectId;
         } catch (error: unknown) {
             this.logger.error("Failed to discover project ID", error);
@@ -98,9 +115,14 @@ export class GeminiApiClient {
         }
     }
 
-    private async callEndpoint(method: string, body: Record<string, unknown>): Promise<unknown> {
-        const {token} = await this.authClient.getAccessToken();
-        const response = await fetch(`${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_API_VERSION}:${method}`,
+    private async callEndpoint(
+        method: string,
+        body: Record<string, unknown>,
+        isRetry: boolean = false
+    ): Promise<unknown> {
+        const { token } = await this.authClient.getAccessToken();
+        const response = await fetch(
+            `${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_API_VERSION}:${method}`,
             {
                 method: "POST",
                 headers: {
@@ -108,11 +130,46 @@ export class GeminiApiClient {
                     Authorization: `Bearer ${token}`,
                 },
                 body: JSON.stringify(body),
-            },
+            }
         );
 
         if (!response.ok) {
             const errorText = await response.text();
+
+            // Handle 429 rate limit errors with OAuth rotation
+            if (
+                response.status === 429 &&
+                !isRetry &&
+                this.oauthRotator.isRotationEnabled()
+            ) {
+                this.logger.info(
+                    "Rate limit (429) detected, attempting OAuth rotation..."
+                );
+
+                // Rotate to next account
+                const rotatedPath = await this.oauthRotator.rotateCredentials();
+
+                if (rotatedPath) {
+                    // Force token refresh by clearing current token
+                    this.authClient.credentials.access_token = undefined;
+
+                    // Retry request once with new credentials
+                    try {
+                        return await this.callEndpoint(method, body, true);
+                    } catch (retryError) {
+                        this.logger.error(
+                            "Retry after OAuth rotation failed",
+                            retryError
+                        );
+                        throw new GeminiApiError(
+                            `API call failed with status ${response.status}: ${errorText}`,
+                            response.status,
+                            errorText
+                        );
+                    }
+                }
+            }
+
             throw new GeminiApiError(
                 `API call failed with status ${response.status}: ${errorText}`,
                 response.status,
@@ -129,6 +186,7 @@ export class GeminiApiClient {
     async getCompletion(
         geminiCompletionRequest: Gemini.ChatCompletionRequest,
         isRetry: boolean = false,
+        isExplicitModelRequest: boolean = false
     ): Promise<{
         content: string;
         tool_calls?: OpenAI.ToolCall[];
@@ -140,13 +198,19 @@ export class GeminiApiClient {
     }> {
         try {
             const chunks: OpenAI.StreamChunk[] = [];
-            for await (const chunk of this.streamContent(geminiCompletionRequest, isRetry)) {
+            for await (const chunk of this.streamContent(
+                geminiCompletionRequest,
+                isRetry,
+                isExplicitModelRequest
+            )) {
                 chunks.push(chunk);
             }
 
             let content = "";
             const tool_calls: OpenAI.ToolCall[] = [];
-            let usage: {inputTokens: number; outputTokens: number} | undefined;
+            let usage:
+                | { inputTokens: number; outputTokens: number }
+                | undefined;
 
             for (const chunk of chunks) {
                 if (chunk.choices[0].delta.content) {
@@ -163,28 +227,37 @@ export class GeminiApiClient {
                 }
             }
 
-
             return {
                 content,
                 tool_calls: tool_calls.length > 0 ? tool_calls : undefined,
                 usage,
             };
         } catch (error) {
-            if (error instanceof GeminiApiError && 
+            if (
+                error instanceof GeminiApiError &&
                 !this.disableAutoModelSwitch &&
                 this.autoSwitcher.isRateLimitError(error.statusCode) &&
-                this.autoSwitcher.shouldAttemptFallback(geminiCompletionRequest.model)) {
-                
+                this.autoSwitcher.shouldAttemptFallback(
+                    geminiCompletionRequest.model,
+                    isExplicitModelRequest
+                )
+            ) {
                 // Attempt fallback using auto-switching helper
-                return await this.autoSwitcher.handleNonStreamingFallback(
+                return (await this.autoSwitcher.handleNonStreamingFallback(
                     geminiCompletionRequest.model,
                     error.statusCode,
                     geminiCompletionRequest,
                     async (model: string, data: RetryableRequestData) => {
-                        const updatedRequest = {...data, model} as Gemini.ChatCompletionRequest;
-                        return await this.getCompletion(updatedRequest, isRetry);
+                        const updatedRequest = {
+                            ...data,
+                            model,
+                        } as Gemini.ChatCompletionRequest;
+                        return await this.getCompletion(
+                            updatedRequest,
+                            isRetry
+                        );
                     }
-                ) as Promise<{
+                )) as Promise<{
                     content: string;
                     tool_calls?: OpenAI.ToolCall[];
                     usage?: {
@@ -201,33 +274,47 @@ export class GeminiApiClient {
     /**
      * Stream content from Gemini API.
      */
-    async* streamContent(
+    async *streamContent(
         geminiCompletionRequest: Gemini.ChatCompletionRequest,
         isRetry: boolean = false,
+        isExplicitModelRequest: boolean = false
     ): AsyncGenerator<OpenAI.StreamChunk> {
         try {
             yield* this.streamContentInternal(geminiCompletionRequest, isRetry);
         } catch (error) {
-            if (error instanceof GeminiApiError && 
+            if (
+                error instanceof GeminiApiError &&
                 !this.disableAutoModelSwitch &&
                 this.autoSwitcher.isRateLimitError(error.statusCode) &&
-                this.autoSwitcher.shouldAttemptFallback(geminiCompletionRequest.model)) {
-                
+                this.autoSwitcher.shouldAttemptFallback(
+                    geminiCompletionRequest.model,
+                    isExplicitModelRequest
+                )
+            ) {
                 // eslint-disable-next-line @typescript-eslint/no-this-alias
                 const self = this;
                 yield* this.autoSwitcher.handleStreamingFallback(
                     geminiCompletionRequest.model,
                     error.statusCode,
                     geminiCompletionRequest,
-                    async function* (model: string, data: RetryableRequestData) {
-                        const updatedRequest = {...data, model} as Gemini.ChatCompletionRequest;
+                    async function* (
+                        model: string,
+                        data: RetryableRequestData
+                    ) {
+                        const updatedRequest = {
+                            ...data,
+                            model,
+                        } as Gemini.ChatCompletionRequest;
                         // Create new client instance to reset firstChunk state
                         const fallbackClient = new GeminiApiClient(
                             self.authClient,
                             self.googleCloudProject,
-                            self.disableAutoModelSwitch,
+                            self.disableAutoModelSwitch
                         );
-                        yield* fallbackClient.streamContent(updatedRequest, isRetry);
+                        yield* fallbackClient.streamContent(
+                            updatedRequest,
+                            isRetry
+                        );
                     },
                     "openai"
                 ) as AsyncIterable<OpenAI.StreamChunk>;
@@ -240,11 +327,11 @@ export class GeminiApiClient {
     /**
      * Internal streaming method with no retry logic
      */
-    private async* streamContentInternal(
+    private async *streamContentInternal(
         geminiCompletionRequest: Gemini.ChatCompletionRequest,
-        isRetry: boolean = false,
+        isRetry: boolean = false
     ): AsyncGenerator<OpenAI.StreamChunk> {
-        const {token} = await this.authClient.getAccessToken();
+        const { token } = await this.authClient.getAccessToken();
         const response = await fetch(
             `${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_API_VERSION}:streamGenerateContent?alt=sse`,
             {
@@ -254,16 +341,49 @@ export class GeminiApiClient {
                     Authorization: `Bearer ${token}`,
                 },
                 body: JSON.stringify(geminiCompletionRequest),
-            },
+            }
         );
 
         if (!response.ok) {
+            // Handle 401 errors with token refresh
             if (response.status === 401 && !isRetry) {
-                this.logger.info("Got 401 error, forcing token refresh and retrying...");
+                this.logger.info(
+                    "Got 401 error, forcing token refresh and retrying..."
+                );
                 this.authClient.credentials.access_token = undefined;
-                yield* this.streamContentInternal(geminiCompletionRequest, true);
+                yield* this.streamContentInternal(
+                    geminiCompletionRequest,
+                    true
+                );
                 return;
             }
+
+            // Handle 429 rate limit errors with OAuth rotation
+            if (
+                response.status === 429 &&
+                !isRetry &&
+                this.oauthRotator.isRotationEnabled()
+            ) {
+                this.logger.info(
+                    "Rate limit (429) detected in stream, attempting OAuth rotation..."
+                );
+
+                // Rotate to next account
+                const rotatedPath = await this.oauthRotator.rotateCredentials();
+
+                if (rotatedPath) {
+                    // Force token refresh by clearing current token
+                    this.authClient.credentials.access_token = undefined;
+
+                    // Retry stream with new credentials
+                    yield* this.streamContentInternal(
+                        geminiCompletionRequest,
+                        true
+                    );
+                    return;
+                }
+            }
+
             const errorText = await response.text();
             throw new GeminiApiError(
                 `Stream request failed: ${response.status} ${errorText}`,
@@ -297,49 +417,75 @@ export class GeminiApiClient {
                                     delta.role = "assistant";
                                     this.firstChunk = false;
                                 }
-                                yield this.createOpenAIChunk(delta, geminiCompletionRequest.model);
+                                yield this.createOpenAIChunk(
+                                    delta,
+                                    geminiCompletionRequest.model
+                                );
                                 thinkingInProgress = true;
                             }
 
-                            const thinkingDelta: OpenAI.StreamDelta = {content: thinkingText};
-                            yield this.createOpenAIChunk(thinkingDelta, geminiCompletionRequest.model);
+                            const thinkingDelta: OpenAI.StreamDelta = {
+                                content: thinkingText,
+                            };
+                            yield this.createOpenAIChunk(
+                                thinkingDelta,
+                                geminiCompletionRequest.model
+                            );
                         } else {
                             // Handle regular content - only if it's not a thinking part
                             if (thinkingInProgress) {
                                 // Close thinking tag before first real content if needed
-                                const closingDelta: OpenAI.StreamDelta = {content: "\n</thinking>\n\n"};
-                                yield this.createOpenAIChunk(closingDelta, geminiCompletionRequest.model);
+                                const closingDelta: OpenAI.StreamDelta = {
+                                    content: "\n</thinking>\n\n",
+                                };
+                                yield this.createOpenAIChunk(
+                                    closingDelta,
+                                    geminiCompletionRequest.model
+                                );
                                 thinkingInProgress = false;
                             }
 
-                            const delta: OpenAI.StreamDelta = {content: part.text};
+                            const delta: OpenAI.StreamDelta = {
+                                content: part.text,
+                            };
                             if (this.firstChunk) {
                                 delta.role = "assistant";
                                 this.firstChunk = false;
                             }
-                            yield this.createOpenAIChunk(delta, geminiCompletionRequest.model);
+                            yield this.createOpenAIChunk(
+                                delta,
+                                geminiCompletionRequest.model
+                            );
                         }
-                    }
-                    else if ("functionCall" in part) {
+                    } else if ("functionCall" in part) {
                         // Handle function calls from Gemini
                         if (thinkingInProgress) {
                             // Close thinking tag before function call if needed
-                            const closingDelta: OpenAI.StreamDelta = {content: "\n</thinking>\n\n"};
-                            yield this.createOpenAIChunk(closingDelta, geminiCompletionRequest.model);
+                            const closingDelta: OpenAI.StreamDelta = {
+                                content: "\n</thinking>\n\n",
+                            };
+                            yield this.createOpenAIChunk(
+                                closingDelta,
+                                geminiCompletionRequest.model
+                            );
                             thinkingInProgress = false;
                         }
 
                         toolCallId = `call_${crypto.randomUUID()}`;
                         const delta: OpenAI.StreamDelta = {
-                            tool_calls: [{
-                                index: 0,
-                                id: toolCallId,
-                                type: "function",
-                                function: {
-                                    name: part.functionCall.name,
-                                    arguments: JSON.stringify(part.functionCall.args)
-                                }
-                            }]
+                            tool_calls: [
+                                {
+                                    index: 0,
+                                    id: toolCallId,
+                                    type: "function",
+                                    function: {
+                                        name: part.functionCall.name,
+                                        arguments: JSON.stringify(
+                                            part.functionCall.args
+                                        ),
+                                    },
+                                },
+                            ],
                         };
 
                         if (this.firstChunk) {
@@ -348,7 +494,10 @@ export class GeminiApiClient {
                             this.firstChunk = false;
                         }
 
-                        yield this.createOpenAIChunk(delta, geminiCompletionRequest.model);
+                        yield this.createOpenAIChunk(
+                            delta,
+                            geminiCompletionRequest.model
+                        );
                     }
                 }
             }
@@ -367,7 +516,11 @@ export class GeminiApiClient {
 
         // Send final chunk with usage data
         const finishReason = toolCallId ? "tool_calls" : "stop";
-        const finalChunk = this.createOpenAIChunk({}, geminiCompletionRequest.model, finishReason);
+        const finalChunk = this.createOpenAIChunk(
+            {},
+            geminiCompletionRequest.model,
+            finishReason
+        );
 
         if (usageData) {
             finalChunk.usage = usageData;
@@ -379,38 +532,49 @@ export class GeminiApiClient {
     /**
      * Creates an OpenAI stream chunk with the given delta
      */
-    private createOpenAIChunk(delta: OpenAI.StreamDelta, modelId: string, finishReason: string | null = null): OpenAI.StreamChunk {
+    private createOpenAIChunk(
+        delta: OpenAI.StreamDelta,
+        modelId: string,
+        finishReason: string | null = null
+    ): OpenAI.StreamChunk {
         return {
             id: this.chatID,
             object: OPENAI_CHAT_COMPLETION_OBJECT,
             created: this.creationTime,
             model: modelId,
-            choices: [{
-                index: 0,
-                delta,
-                finish_reason: finishReason,
-                logprobs: null
-            }],
-            usage: null
+            choices: [
+                {
+                    index: 0,
+                    delta,
+                    finish_reason: finishReason,
+                    logprobs: null,
+                },
+            ],
+            usage: null,
         };
     }
 
     /**
      * Parses a server-sent event (SSE) stream from the Gemini API.
      */
-    private async* parseSSEStream(stream: ReadableStream<Uint8Array>): AsyncGenerator<Gemini.Response> {
+    private async *parseSSEStream(
+        stream: ReadableStream<Uint8Array>
+    ): AsyncGenerator<Gemini.Response> {
         const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
         let buffer = "";
         let objectBuffer = "";
 
         while (true) {
-            const {done, value} = await reader.read();
+            const { done, value } = await reader.read();
             if (done) {
                 if (objectBuffer) {
                     try {
                         yield JSON.parse(objectBuffer);
                     } catch (e) {
-                        this.logger.error("Error parsing final SSE JSON object", e);
+                        this.logger.error(
+                            "Error parsing final SSE JSON object",
+                            e
+                        );
                     }
                 }
                 break;
@@ -426,7 +590,10 @@ export class GeminiApiClient {
                         try {
                             yield JSON.parse(objectBuffer);
                         } catch (e) {
-                            this.logger.error("Error parsing SSE JSON object", e);
+                            this.logger.error(
+                                "Error parsing SSE JSON object",
+                                e
+                            );
                         }
                         objectBuffer = "";
                     }
@@ -437,4 +604,3 @@ export class GeminiApiClient {
         }
     }
 }
-

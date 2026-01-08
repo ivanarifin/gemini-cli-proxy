@@ -1,6 +1,8 @@
 export enum Model {
     Gemini25Flash = "gemini-2.5-flash",
     Gemini25Pro = "gemini-2.5-pro",
+    Gemini3FlashPreview = "gemini-3-flash-preview",
+    Gemini3ProPreview = "gemini-3-pro-preview",
 }
 
 export type ChatCompletionRequestBody = {
@@ -85,7 +87,7 @@ export type ChatMessage = {
 // Gemini API response types
 export type Candidate = {
     content?: {
-        parts?: Array<{text?: string}>;
+        parts?: Array<{ text?: string }>;
     };
 };
 
@@ -103,10 +105,12 @@ export type Response = {
 
 export type ProjectDiscoveryResponse = {
     cloudaicompanionProject?: string;
-    allowedTiers: Array<{
-        id: string;
-        isDefault?: boolean;
-    }> | undefined;
+    allowedTiers:
+        | Array<{
+              id: string;
+              isDefault?: boolean;
+          }>
+        | undefined;
 };
 
 export type OnboardUserResponse = {
@@ -115,5 +119,5 @@ export type OnboardUserResponse = {
         cloudaicompanionProject?: {
             id: string;
         };
-    }
+    };
 };
