@@ -4,7 +4,7 @@ import { DEFAULT_TEMPERATURE } from "../utils/constant.js";
 import { mapModelToGemini, mapJsonSchemaToGemini } from "./mapper.js";
 
 export const mapAnthropicMessagesRequestToGemini = (
-    project: string,
+    project: string | undefined,
     request: Anthropic.MessagesRequest
 ): Gemini.ChatCompletionRequest => {
     const model = mapModelToGemini(request.model);
@@ -48,7 +48,7 @@ export const mapAnthropicMessagesRequestToGemini = (
 
     return {
         model,
-        project,
+        ...(project && { project }),
         request: geminiRequest,
     };
 };

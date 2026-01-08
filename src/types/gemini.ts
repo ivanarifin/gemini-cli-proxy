@@ -20,7 +20,7 @@ export type ChatCompletionRequestBody = {
 
 export type ChatCompletionRequest = {
     model: Model;
-    project: string;
+    project?: string;
     request: ChatCompletionRequestBody;
 };
 

@@ -4,7 +4,7 @@ import { DEFAULT_TEMPERATURE } from "../utils/constant.js";
 import { mapModelToGemini, mapJsonSchemaToGemini } from "./mapper.js";
 
 export const mapOpenAIChatCompletionRequestToGemini = (
-    project: string,
+    project: string | undefined,
     request: OpenAI.ChatCompletionRequest
 ): Gemini.ChatCompletionRequest => {
     const model = mapModelToGemini(request.model);
@@ -45,7 +45,7 @@ export const mapOpenAIChatCompletionRequestToGemini = (
 
     return {
         model,
-        project,
+        ...(project && { project }),
         request: geminiRequest,
     };
 };
