@@ -117,10 +117,71 @@ export function createAnthropicRouter(
                     const geminiStream =
                         geminiClient.streamContent(geminiRequest);
                     let totalContent = "";
+                    let inReasoning = false;
 
                     for await (const chunk of geminiStream) {
-                        if (chunk.choices && chunk.choices[0]?.delta?.content) {
-                            const deltaText = chunk.choices[0].delta.content;
+                        const delta = chunk.choices[0]?.delta;
+
+                        // Handle reasoning content
+                        if (delta?.reasoning) {
+                            if (!inReasoning) {
+                                // Start reasoning block
+                                const reasoningStart: Anthropic.ContentBlockStartEvent =
+                                    {
+                                        type: "content_block_start",
+                                        index: 0,
+                                        content_block: {
+                                            type: "text",
+                                            text: "<thinking>\n",
+                                        },
+                                    };
+                                res.write(
+                                    `event: content_block_start\ndata: ${JSON.stringify(
+                                        reasoningStart
+                                    )}\n\n`
+                                );
+                                inReasoning = true;
+                            }
+
+                            // Stream reasoning content
+                            const reasoningDelta: Anthropic.ContentBlockDeltaEvent =
+                                {
+                                    type: "content_block_delta",
+                                    index: 0,
+                                    delta: {
+                                        type: "text_delta",
+                                        text: delta.reasoning,
+                                    },
+                                };
+                            res.write(
+                                `event: content_block_delta\ndata: ${JSON.stringify(
+                                    reasoningDelta
+                                )}\n\n`
+                            );
+                        }
+
+                        // Handle regular content
+                        if (delta?.content) {
+                            if (inReasoning) {
+                                // Close reasoning block before regular content
+                                const reasoningStop: Anthropic.ContentBlockDeltaEvent =
+                                    {
+                                        type: "content_block_delta",
+                                        index: 0,
+                                        delta: {
+                                            type: "text_delta",
+                                            text: "\n</thinking>\n\n",
+                                        },
+                                    };
+                                res.write(
+                                    `event: content_block_delta\ndata: ${JSON.stringify(
+                                        reasoningStop
+                                    )}\n\n`
+                                );
+                                inReasoning = false;
+                            }
+
+                            const deltaText = delta.content;
                             totalContent += deltaText;
 
                             const contentDelta: Anthropic.ContentBlockDeltaEvent =
@@ -150,6 +211,35 @@ export function createAnthropicRouter(
                             contentBlockStop
                         )}\n\n`
                     );
+
+                    // Close reasoning block if still open
+                    if (inReasoning) {
+                        const reasoningStop: Anthropic.ContentBlockDeltaEvent =
+                            {
+                                type: "content_block_delta",
+                                index: 0,
+                                delta: {
+                                    type: "text_delta",
+                                    text: "\n</thinking>\n\n",
+                                },
+                            };
+                        res.write(
+                            `event: content_block_delta\ndata: ${JSON.stringify(
+                                reasoningStop
+                            )}\n\n`
+                        );
+
+                        const reasoningBlockStop: Anthropic.ContentBlockStopEvent =
+                            {
+                                type: "content_block_stop",
+                                index: 0,
+                            };
+                        res.write(
+                            `event: content_block_stop\ndata: ${JSON.stringify(
+                                reasoningBlockStop
+                            )}\n\n`
+                        );
+                    }
 
                     // Send message_delta event (with final usage)
                     const messageDelta: Anthropic.MessageDeltaEvent = {

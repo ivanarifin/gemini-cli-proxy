@@ -112,6 +112,16 @@ export function createOpenAIRouter(
                         isExplicitModelRequest // Pass explicit model request flag
                     );
 
+                    // Build message content - include reasoning if present
+                    let messageContent: string | null =
+                        completion.content || null;
+                    if (completion.reasoning) {
+                        // If reasoning is present, prepend it with thinking tags
+                        messageContent = `<thinking>\n${
+                            completion.reasoning
+                        }\n</thinking>\n\n${completion.content || ""}`;
+                    }
+
                     const response: OpenAI.ChatCompletionResponse = {
                         id: `chatcmpl-${crypto.randomUUID()}`,
                         object: "chat.completion",
@@ -122,7 +132,7 @@ export function createOpenAIRouter(
                                 index: 0,
                                 message: {
                                     role: "assistant",
-                                    content: completion.content,
+                                    content: messageContent,
                                     tool_calls: completion.tool_calls,
                                 },
                                 finish_reason:

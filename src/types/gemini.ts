@@ -94,6 +94,7 @@ export type Candidate = {
 export type UsageMetadata = {
     promptTokenCount?: number;
     candidatesTokenCount?: number;
+    thoughtsTokenCount?: number;
 };
 
 export type Response = {

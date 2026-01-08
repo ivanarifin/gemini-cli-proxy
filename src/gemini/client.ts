@@ -226,6 +226,7 @@ export class GeminiApiClient {
         isExplicitModelRequest: boolean = false
     ): Promise<{
         content: string;
+        reasoning?: string;
         tool_calls?: OpenAI.ToolCall[];
         usage?: {
             inputTokens: number;
@@ -244,6 +245,7 @@ export class GeminiApiClient {
             }
 
             let content = "";
+            let reasoning = "";
             const tool_calls: OpenAI.ToolCall[] = [];
             let usage:
                 | { inputTokens: number; outputTokens: number }
@@ -252,6 +254,9 @@ export class GeminiApiClient {
             for (const chunk of chunks) {
                 if (chunk.choices[0].delta.content) {
                     content += chunk.choices[0].delta.content;
+                }
+                if (chunk.choices[0].delta.reasoning) {
+                    reasoning += chunk.choices[0].delta.reasoning;
                 }
                 if (chunk.choices[0].delta.tool_calls) {
                     tool_calls.push(...chunk.choices[0].delta.tool_calls);
@@ -266,6 +271,7 @@ export class GeminiApiClient {
 
             return {
                 content,
+                reasoning: reasoning || undefined,
                 tool_calls: tool_calls.length > 0 ? tool_calls : undefined,
                 usage,
             };
@@ -464,7 +470,7 @@ export class GeminiApiClient {
 
         let toolCallId: string | undefined = undefined;
         let usageData: OpenAI.UsageData | undefined;
-        let thinkingInProgress = false;
+        let reasoningTokens = 0;
 
         for await (const jsonData of this.parseSSEStream(response.body)) {
             const candidate = jsonData.response?.candidates?.[0];
@@ -474,43 +480,21 @@ export class GeminiApiClient {
                     if ("text" in part) {
                         // Handle text content
                         if (part.thought === true) {
-                            // Handle thinking content from Gemini
-                            const thinkingText = part.text;
-                            const delta: OpenAI.StreamDelta = {};
-                            if (!thinkingInProgress) {
-                                delta.content = "<thinking>\n";
-                                if (this.firstChunk) {
-                                    delta.role = "assistant";
-                                    this.firstChunk = false;
-                                }
-                                yield this.createOpenAIChunk(
-                                    delta,
-                                    geminiCompletionRequest.model
-                                );
-                                thinkingInProgress = true;
-                            }
-
-                            const thinkingDelta: OpenAI.StreamDelta = {
-                                content: thinkingText,
+                            // Handle thinking/reasoning content from Gemini
+                            // Send as separate reasoning field for Kilo Code compatibility
+                            const reasoningDelta: OpenAI.StreamDelta = {
+                                reasoning: part.text,
                             };
+                            if (this.firstChunk) {
+                                reasoningDelta.role = "assistant";
+                                this.firstChunk = false;
+                            }
                             yield this.createOpenAIChunk(
-                                thinkingDelta,
+                                reasoningDelta,
                                 geminiCompletionRequest.model
                             );
                         } else {
-                            // Handle regular content - only if it's not a thinking part
-                            if (thinkingInProgress) {
-                                // Close thinking tag before first real content if needed
-                                const closingDelta: OpenAI.StreamDelta = {
-                                    content: "\n</thinking>\n\n",
-                                };
-                                yield this.createOpenAIChunk(
-                                    closingDelta,
-                                    geminiCompletionRequest.model
-                                );
-                                thinkingInProgress = false;
-                            }
-
+                            // Handle regular content
                             const delta: OpenAI.StreamDelta = {
                                 content: part.text,
                             };
@@ -525,18 +509,6 @@ export class GeminiApiClient {
                         }
                     } else if ("functionCall" in part) {
                         // Handle function calls from Gemini
-                        if (thinkingInProgress) {
-                            // Close thinking tag before function call if needed
-                            const closingDelta: OpenAI.StreamDelta = {
-                                content: "\n</thinking>\n\n",
-                            };
-                            yield this.createOpenAIChunk(
-                                closingDelta,
-                                geminiCompletionRequest.model
-                            );
-                            thinkingInProgress = false;
-                        }
-
                         toolCallId = `call_${crypto.randomUUID()}`;
                         const delta: OpenAI.StreamDelta = {
                             tool_calls: [
@@ -572,6 +544,7 @@ export class GeminiApiClient {
                 const usage = jsonData.response.usageMetadata;
                 const prompt_tokens = usage.promptTokenCount ?? 0;
                 const completion_tokens = usage.candidatesTokenCount ?? 0;
+                reasoningTokens = usage.thoughtsTokenCount ?? 0;
                 usageData = {
                     prompt_tokens,
                     completion_tokens,
@@ -590,6 +563,11 @@ export class GeminiApiClient {
 
         if (usageData) {
             finalChunk.usage = usageData;
+            // Include reasoning tokens in usage if available
+            if (reasoningTokens > 0) {
+                finalChunk.usage.completion_tokens += reasoningTokens;
+                finalChunk.usage.total_tokens += reasoningTokens;
+            }
         }
 
         yield finalChunk;
