@@ -13,6 +13,7 @@ export class OAuthRotator {
     private credentialFilePaths: string[] = [];
     private logger = getLogger("ROTATOR", chalk.magenta);
     private isEnabled: boolean = false;
+    private folderPath: string | null = null;
 
     /**
      * Singleton pattern - get the global instance
@@ -46,10 +47,61 @@ export class OAuthRotator {
     }
 
     /**
+     * Initialize rotator with a folder path containing OAuth credential files
+     * @param folderPath Path to folder containing OAuth JSON credential files
+     */
+    public async initializeWithFolder(folderPath: string): Promise<void> {
+        if (!folderPath || folderPath.trim() === "") {
+            this.isEnabled = false;
+            this.logger.info(
+                "OAuth rotation disabled: No folder path provided"
+            );
+            return;
+        }
+
+        try {
+            // Discover all JSON files in the folder
+            const files = await fs.readdir(folderPath);
+            const jsonFiles = files
+                .filter((file) => file.endsWith(".json"))
+                .map((file) => path.join(folderPath, file));
+
+            if (jsonFiles.length === 0) {
+                this.isEnabled = false;
+                this.logger.info(
+                    `OAuth rotation disabled: No JSON files found in ${folderPath}`
+                );
+                return;
+            }
+
+            this.credentialFilePaths = jsonFiles;
+            this.currentIndex = 0;
+            this.folderPath = folderPath;
+            this.isEnabled = true;
+            this.logger.info(
+                `OAuth rotation enabled with ${jsonFiles.length} account(s) from folder: ${folderPath}`
+            );
+        } catch (error) {
+            this.isEnabled = false;
+            this.logger.error(
+                `Failed to initialize OAuth rotation from folder ${folderPath}`,
+                error
+            );
+        }
+    }
+
+    /**
      * Check if rotation is enabled
      */
     public isRotationEnabled(): boolean {
         return this.isEnabled && this.credentialFilePaths.length > 1;
+    }
+
+    /**
+     * Get the folder path being used for rotation
+     */
+    public getFolderPath(): string | null {
+        return this.folderPath;
     }
 
     /**

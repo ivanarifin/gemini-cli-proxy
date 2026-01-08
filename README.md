@@ -7,7 +7,7 @@ This local server provides OpenAI (`/openai`) and Anthropic (`/anthropic`) compa
 
 ### But why?
 
-Gemini CodeAssist (Gemini CLI) offers a generous free tier. As of [2025-09-01](https://codeassist.google/), the free tier offers 60 requests/min and
+Gemini CodeAssist (Gemini CLI) offers a generous free tier. As of [2025-09-01](https://codeassist.google/), free tier offers 60 requests/min and
 1,000 requests/day.
 
 Gemini CodeAssist does not provide direct access to Gemini models which limits your choice to ~~[highly rated CodeAssist plugins](https://plugins.jetbrains.com/plugin/24198-gemini-code-assist)~~
@@ -35,6 +35,7 @@ Options:
 - `--disable-google-search` - Disables native Google Search tool (default: false)
 - `--disable-auto-model-switch` - Disables auto model switching in case of rate limiting (default: false)
 - `--oauth-rotation-paths <paths>` - Comma-separated paths to OAuth credential files for automatic rotation on rate limits (default: disabled)
+- `--oauth-rotation-folder <folder>` - Path to folder containing OAuth credential files for automatic rotation (default: disabled)
 
 If you have NOT used Gemini CLI before, you will be prompted to log in to Gemini CLI App through browser. Credentials will be saved in the folder (`~/.gemini/oauth_creds.json`) used by Gemini CLI.
 
@@ -45,10 +46,10 @@ The following Gemini models are supported:
 - `auto` - Enables automatic model switching (starts with gemini-3-pro-preview, downgrades on rate limits)
 - `gemini-2.5-pro` - Previous generation Pro model
 - `gemini-2.5-flash` - Faster, lighter model
-- `gemini-3-pro-preview` - Latest Gemini 3 Pro model (preview)
+- `gemini-3-pro-preview` - Latest Gemini 3 Pro model (preview, default for "auto")
 - `gemini-3-flash-preview` - Latest Gemini 3 Flash model (preview)
 
-`gemini-2.5-pro` is the default model when you request a model other than the supported models listed above.
+`gemini-3-pro-preview` is the default model when you request "auto" or when no model is specified.
 
 ### Intelligent Model Passthrough
 
@@ -128,13 +129,37 @@ Add the following to the Zed config file
 
 To enable automatic OAuth token rotation when rate limits (HTTP 429) are encountered:
 
+### Method 1: Using Individual File Paths
+
 1. Create multiple OAuth credential files by authenticating with different Google accounts
 2. Save each credential file (e.g., `~/.gemini/oauth_creds.json`) to different locations
-3. Start the server with the `--oauth-rotation-paths` option:
+3. Start the server with `--oauth-rotation-paths` option:
 
 ```bash
 gemini-cli-proxy --oauth-rotation-paths "/path/to/acc1.json,/path/to/acc2.json,/path/to/acc3.json"
 ```
+
+### Method 2: Using a Folder (Recommended)
+
+1. Create a folder and save all OAuth credential files in it
+2. Start the server with `--oauth-rotation-folder` option:
+
+```bash
+# Create folder and add your OAuth credential files
+mkdir -p /path/to/oauth-accounts
+cp ~/.gemini/oauth_creds.json /path/to/oauth-accounts/account1.json
+# Add more accounts as needed...
+
+# Start server with folder-based rotation
+gemini-cli-proxy --oauth-rotation-folder "/path/to/oauth-accounts"
+```
+
+**Benefits of folder-based rotation:**
+
+- No need to restart when adding new accounts - just add JSON files to the folder
+- All accounts are automatically discovered and rotated
+- Easier to manage multiple accounts
+- No need to specify individual file paths
 
 When a 429 error is detected:
 
@@ -143,7 +168,7 @@ When a 429 error is detected:
 3. The failed request is automatically retried once with the new account
 4. A log message indicates which account is now active: `[ROTATOR] Rate limit hit. Switched to account: <filename>`
 
-**Note:** OAuth rotation requires at least 2 credential paths to be effective.
+**Note:** OAuth rotation requires at least 2 credential files (or 2+ JSON files in a folder) to be effective.
 
 ## Development
 

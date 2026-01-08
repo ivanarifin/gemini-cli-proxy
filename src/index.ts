@@ -43,6 +43,11 @@ const program = new Command()
         "Comma-separated paths to OAuth credential files for rotation",
         ""
     )
+    .option(
+        "--oauth-rotation-folder <folder>",
+        "Path to folder containing OAuth credential files for rotation",
+        ""
+    )
     .parse(process.argv);
 
 const opts = program.opts();
