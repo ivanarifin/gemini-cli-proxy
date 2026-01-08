@@ -73,7 +73,7 @@ export function createOpenAIRouter(
                 const writer = writable.getWriter();
                 const reader = readable.getReader();
 
-                (async () => {
+                void (async () => {
                     try {
                         const geminiStream = geminiClient.streamContent(
                             geminiCompletionRequest,

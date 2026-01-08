@@ -1,5 +1,8 @@
-import {describe, it, expect} from "vitest";
-import {mapAnthropicMessagesRequestToGemini, mapGeminiResponseToAnthropic} from "./anthropic-mapper.js";
+import { describe, it, expect } from "vitest";
+import {
+    mapAnthropicMessagesRequestToGemini,
+    mapGeminiResponseToAnthropic,
+} from "./anthropic-mapper.js";
 import * as Anthropic from "../types/anthropic.js";
 import * as Gemini from "../types/gemini.js";
 
@@ -11,18 +14,23 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
             messages: [
                 {
                     role: "user",
-                    content: "Hello world"
-                }
-            ]
+                    content: "Hello world",
+                },
+            ],
         };
 
-        const result = mapAnthropicMessagesRequestToGemini("test-project", request);
+        const result = mapAnthropicMessagesRequestToGemini(
+            "test-project",
+            request
+        );
 
-        expect(result.model).toBe(Gemini.Model.Gemini25Pro);
+        expect(result.model).toBe(Gemini.Model.Gemini3ProPreview);
         expect(result.project).toBe("test-project");
         expect(result.request.contents).toHaveLength(1);
         expect(result.request.contents[0].role).toBe("user");
-        expect(result.request.contents[0].parts).toEqual([{text: "Hello world"}]);
+        expect(result.request.contents[0].parts).toEqual([
+            { text: "Hello world" },
+        ]);
     });
 
     it("should map request with temperature", () => {
@@ -33,12 +41,15 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
             messages: [
                 {
                     role: "user",
-                    content: "Test message"
-                }
-            ]
+                    content: "Test message",
+                },
+            ],
         };
 
-        const result = mapAnthropicMessagesRequestToGemini("test-project", request);
+        const result = mapAnthropicMessagesRequestToGemini(
+            "test-project",
+            request
+        );
 
         expect(result.request.generationConfig?.temperature).toBe(0.7);
     });
@@ -50,22 +61,25 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
             system: [
                 {
                     type: "text",
-                    text: "You are a helpful assistant"
-                }
+                    text: "You are a helpful assistant",
+                },
             ],
             messages: [
                 {
                     role: "user",
-                    content: "Hello"
-                }
-            ]
+                    content: "Hello",
+                },
+            ],
         };
 
-        const result = mapAnthropicMessagesRequestToGemini("test-project", request);
+        const result = mapAnthropicMessagesRequestToGemini(
+            "test-project",
+            request
+        );
 
         expect(result.request.systemInstruction).toBeDefined();
         expect(result.request.systemInstruction?.parts).toEqual([
-            {text: "You are a helpful assistant"}
+            { text: "You are a helpful assistant" },
         ]);
     });
 
@@ -80,42 +94,48 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
                     input_schema: {
                         type: "object",
                         properties: {
-                            location: {type: "string"},
+                            location: { type: "string" },
                             options: {
-                                type: ["string", "null"]
-                            }
+                                type: ["string", "null"],
+                            },
                         },
                         required: ["location"],
-                        $schema: "http://json-schema.org/draft-07/schema#"
-                    }
-                }
+                        $schema: "http://json-schema.org/draft-07/schema#",
+                    },
+                },
             ],
             messages: [
                 {
                     role: "user",
-                    content: "What is the weather?"
-                }
-            ]
+                    content: "What is the weather?",
+                },
+            ],
         };
 
-        const result = mapAnthropicMessagesRequestToGemini("test-project", request);
+        const result = mapAnthropicMessagesRequestToGemini(
+            "test-project",
+            request
+        );
 
         expect(result.request.tools).toBeDefined();
         expect(result.request.tools?.functionDeclarations).toHaveLength(1);
-        
-        const functionDeclaration = result.request.tools?.functionDeclarations?.[0];
+
+        const functionDeclaration =
+            result.request.tools?.functionDeclarations?.[0];
         expect(functionDeclaration?.name).toBe("get_weather");
-        expect(functionDeclaration?.description).toBe("Get weather information");
+        expect(functionDeclaration?.description).toBe(
+            "Get weather information"
+        );
         expect(functionDeclaration?.parameters).toEqual({
             type: "object",
             properties: {
-                location: {type: "string"},
+                location: { type: "string" },
                 options: {
                     type: "string",
-                    nullable: true
-                }
+                    nullable: true,
+                },
             },
-            required: ["location"]
+            required: ["location"],
         });
         // Ensure $schema is removed and array types are converted
         expect(functionDeclaration?.parameters).not.toHaveProperty("$schema");
@@ -130,23 +150,26 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
                 {
                     name: "test_tool",
                     description: "Test tool",
-                    input_schema: {type: "object"}
-                }
+                    input_schema: { type: "object" },
+                },
             ],
             messages: [
                 {
                     role: "user",
-                    content: "Test"
-                }
-            ]
+                    content: "Test",
+                },
+            ],
         };
 
-        const result = mapAnthropicMessagesRequestToGemini("test-project", request);
+        const result = mapAnthropicMessagesRequestToGemini(
+            "test-project",
+            request
+        );
 
         expect(result.request.toolConfig).toEqual({
             functionCallingConfig: {
-                mode: "AUTO"
-            }
+                mode: "AUTO",
+            },
         });
     });
 
@@ -159,23 +182,26 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
                 {
                     name: "test_tool",
                     description: "Test tool",
-                    input_schema: {type: "object"}
-                }
+                    input_schema: { type: "object" },
+                },
             ],
             messages: [
                 {
                     role: "user",
-                    content: "Test"
-                }
-            ]
+                    content: "Test",
+                },
+            ],
         };
 
-        const result = mapAnthropicMessagesRequestToGemini("test-project", request);
+        const result = mapAnthropicMessagesRequestToGemini(
+            "test-project",
+            request
+        );
 
         expect(result.request.toolConfig).toEqual({
             functionCallingConfig: {
-                mode: "ANY"
-            }
+                mode: "ANY",
+            },
         });
     });
 
@@ -185,30 +211,33 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
             max_tokens: 1000,
             tool_choice: {
                 type: "tool",
-                name: "specific_tool"
+                name: "specific_tool",
             },
             tools: [
                 {
                     name: "specific_tool",
                     description: "Specific tool",
-                    input_schema: {type: "object"}
-                }
+                    input_schema: { type: "object" },
+                },
             ],
             messages: [
                 {
                     role: "user",
-                    content: "Test"
-                }
-            ]
+                    content: "Test",
+                },
+            ],
         };
 
-        const result = mapAnthropicMessagesRequestToGemini("test-project", request);
+        const result = mapAnthropicMessagesRequestToGemini(
+            "test-project",
+            request
+        );
 
         expect(result.request.toolConfig).toEqual({
             functionCallingConfig: {
                 mode: "ANY",
-                allowedFunctionNames: ["specific_tool"]
-            }
+                allowedFunctionNames: ["specific_tool"],
+            },
         });
     });
 
@@ -222,30 +251,35 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
                     content: [
                         {
                             type: "text",
-                            text: "Hello"
+                            text: "Hello",
                         },
                         {
                             type: "image",
                             source: {
                                 type: "base64",
                                 media_type: "image/png",
-                                data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
-                            }
-                        }
-                    ]
-                }
-            ]
+                                data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
+                            },
+                        },
+                    ],
+                },
+            ],
         };
 
-        const result = mapAnthropicMessagesRequestToGemini("test-project", request);
+        const result = mapAnthropicMessagesRequestToGemini(
+            "test-project",
+            request
+        );
 
         expect(result.request.contents[0].parts).toHaveLength(2);
-        expect(result.request.contents[0].parts[0]).toEqual({text: "Hello\n"});
+        expect(result.request.contents[0].parts[0]).toEqual({
+            text: "Hello\n",
+        });
         expect(result.request.contents[0].parts[1]).toEqual({
             inlineData: {
                 mimeType: "image/png",
-                data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
-            }
+                data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
+            },
         });
     });
 
@@ -259,16 +293,21 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
                     content: [
                         {
                             type: "text",
-                            text: "Hello world"
-                        }
-                    ]
-                }
-            ]
+                            text: "Hello world",
+                        },
+                    ],
+                },
+            ],
         };
 
-        const result = mapAnthropicMessagesRequestToGemini("test-project", request);
+        const result = mapAnthropicMessagesRequestToGemini(
+            "test-project",
+            request
+        );
 
-        expect(result.request.contents[0].parts).toEqual([{text: "Hello world\n"}]);
+        expect(result.request.contents[0].parts).toEqual([
+            { text: "Hello world\n" },
+        ]);
     });
 
     it("should not add extra newline to text content that already ends with newline", () => {
@@ -280,17 +319,22 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
                     role: "user",
                     content: [
                         {
-                            type: "text", 
-                            text: "Hello world\n"
-                        }
-                    ]
-                }
-            ]
+                            type: "text",
+                            text: "Hello world\n",
+                        },
+                    ],
+                },
+            ],
         };
 
-        const result = mapAnthropicMessagesRequestToGemini("test-project", request);
+        const result = mapAnthropicMessagesRequestToGemini(
+            "test-project",
+            request
+        );
 
-        expect(result.request.contents[0].parts).toEqual([{text: "Hello world\n"}]);
+        expect(result.request.contents[0].parts).toEqual([
+            { text: "Hello world\n" },
+        ]);
     });
 
     it("should handle empty text content by adding newline", () => {
@@ -303,16 +347,19 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
                     content: [
                         {
                             type: "text",
-                            text: ""
-                        }
-                    ]
-                }
-            ]
+                            text: "",
+                        },
+                    ],
+                },
+            ],
         };
 
-        const result = mapAnthropicMessagesRequestToGemini("test-project", request);
+        const result = mapAnthropicMessagesRequestToGemini(
+            "test-project",
+            request
+        );
 
-        expect(result.request.contents[0].parts).toEqual([{text: "\n"}]);
+        expect(result.request.contents[0].parts).toEqual([{ text: "\n" }]);
     });
 
     it("should handle multiple text contents with newline logic", () => {
@@ -325,27 +372,30 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
                     content: [
                         {
                             type: "text",
-                            text: "First text"
+                            text: "First text",
                         },
                         {
                             type: "text",
-                            text: "Second text\n"
+                            text: "Second text\n",
                         },
                         {
                             type: "text",
-                            text: "Third text"
-                        }
-                    ]
-                }
-            ]
+                            text: "Third text",
+                        },
+                    ],
+                },
+            ],
         };
 
-        const result = mapAnthropicMessagesRequestToGemini("test-project", request);
+        const result = mapAnthropicMessagesRequestToGemini(
+            "test-project",
+            request
+        );
 
         expect(result.request.contents[0].parts).toEqual([
-            {text: "First text\n"},
-            {text: "Second text\n"},
-            {text: "Third text\n"}
+            { text: "First text\n" },
+            { text: "Second text\n" },
+            { text: "Third text\n" },
         ]);
     });
 
@@ -359,36 +409,39 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
                     content: [
                         {
                             type: "text",
-                            text: "Look at this image"
+                            text: "Look at this image",
                         },
                         {
                             type: "image",
                             source: {
                                 type: "base64",
                                 media_type: "image/jpeg",
-                                data: "test-image-data"
-                            }
+                                data: "test-image-data",
+                            },
                         },
                         {
                             type: "text",
-                            text: "What do you see?\n"
-                        }
-                    ]
-                }
-            ]
+                            text: "What do you see?\n",
+                        },
+                    ],
+                },
+            ],
         };
 
-        const result = mapAnthropicMessagesRequestToGemini("test-project", request);
+        const result = mapAnthropicMessagesRequestToGemini(
+            "test-project",
+            request
+        );
 
         expect(result.request.contents[0].parts).toEqual([
-            {text: "Look at this image\n"},
+            { text: "Look at this image\n" },
             {
                 inlineData: {
                     mimeType: "image/jpeg",
-                    data: "test-image-data"
-                }
+                    data: "test-image-data",
+                },
             },
-            {text: "What do you see?\n"}
+            { text: "What do you see?\n" },
         ]);
     });
 
@@ -399,43 +452,51 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
             messages: [
                 {
                     role: "assistant",
-                    content: "Hello from assistant"
-                }
-            ]
+                    content: "Hello from assistant",
+                },
+            ],
         };
 
-        const result = mapAnthropicMessagesRequestToGemini("test-project", request);
+        const result = mapAnthropicMessagesRequestToGemini(
+            "test-project",
+            request
+        );
 
         expect(result.request.contents[0].role).toBe("model");
-        expect(result.request.contents[0].parts).toEqual([{text: "Hello from assistant"}]);
+        expect(result.request.contents[0].parts).toEqual([
+            { text: "Hello from assistant" },
+        ]);
     });
 
     it("should handle invalid tool_choice with fallback to auto", () => {
         const request: Anthropic.MessagesRequest = {
             model: "claude-3-5-sonnet-20241022",
             max_tokens: 1000,
-            tool_choice: {type: "invalid"} as unknown as Anthropic.ToolChoice,
+            tool_choice: { type: "invalid" } as unknown as Anthropic.ToolChoice,
             tools: [
                 {
                     name: "test_tool",
                     description: "Test tool",
-                    input_schema: {type: "object"}
-                }
+                    input_schema: { type: "object" },
+                },
             ],
             messages: [
                 {
                     role: "user",
-                    content: "Test"
-                }
-            ]
+                    content: "Test",
+                },
+            ],
         };
 
-        const result = mapAnthropicMessagesRequestToGemini("test-project", request);
+        const result = mapAnthropicMessagesRequestToGemini(
+            "test-project",
+            request
+        );
 
         expect(result.request.toolConfig).toEqual({
             functionCallingConfig: {
-                mode: "AUTO"
-            }
+                mode: "AUTO",
+            },
         });
     });
 });
@@ -446,11 +507,15 @@ describe("mapGeminiResponseToAnthropic", () => {
             content: "Hello from Gemini",
             usage: {
                 inputTokens: 10,
-                outputTokens: 5
-            }
+                outputTokens: 5,
+            },
         };
 
-        const result = mapGeminiResponseToAnthropic(geminiResponse, "claude-3-5-sonnet-20241022", "req-123");
+        const result = mapGeminiResponseToAnthropic(
+            geminiResponse,
+            "claude-3-5-sonnet-20241022",
+            "req-123"
+        );
 
         expect(result.id).toBe("req-123");
         expect(result.type).toBe("message");
@@ -460,11 +525,11 @@ describe("mapGeminiResponseToAnthropic", () => {
         expect(result.content).toHaveLength(1);
         expect(result.content[0]).toEqual({
             type: "text",
-            text: "Hello from Gemini"
+            text: "Hello from Gemini",
         });
         expect(result.usage).toEqual({
             input_tokens: 10,
-            output_tokens: 5
+            output_tokens: 5,
         });
     });
 
@@ -476,32 +541,36 @@ describe("mapGeminiResponseToAnthropic", () => {
                     id: "tool_call_123",
                     function: {
                         name: "get_weather",
-                        arguments: "{\"location\": \"New York\"}"
-                    }
-                }
+                        arguments: '{"location": "New York"}',
+                    },
+                },
             ],
             usage: {
                 inputTokens: 15,
-                outputTokens: 20
-            }
+                outputTokens: 20,
+            },
         };
 
-        const result = mapGeminiResponseToAnthropic(geminiResponse, "claude-3-5-sonnet-20241022", "req-456");
+        const result = mapGeminiResponseToAnthropic(
+            geminiResponse,
+            "claude-3-5-sonnet-20241022",
+            "req-456"
+        );
 
         expect(result.id).toBe("req-456");
         expect(result.stop_reason).toBe("tool_use");
         expect(result.content).toHaveLength(2);
-        
+
         expect(result.content[0]).toEqual({
             type: "text",
-            text: "I will check the weather for you."
+            text: "I will check the weather for you.",
         });
-        
+
         expect(result.content[1]).toEqual({
             type: "tool_use",
             id: "tool_call_123",
             name: "get_weather",
-            input: {location: "New York"}
+            input: { location: "New York" },
         });
     });
 
@@ -512,40 +581,44 @@ describe("mapGeminiResponseToAnthropic", () => {
                     id: "tool_call_456",
                     function: {
                         name: "calculate",
-                        arguments: "{\"expression\": \"2 + 2\"}"
-                    }
+                        arguments: '{"expression": "2 + 2"}',
+                    },
                 },
                 {
                     id: "tool_call_789",
                     function: {
                         name: "search",
-                        arguments: "{\"query\": \"artificial intelligence\"}"
-                    }
-                }
+                        arguments: '{"query": "artificial intelligence"}',
+                    },
+                },
             ],
             usage: {
                 inputTokens: 20,
-                outputTokens: 10
-            }
+                outputTokens: 10,
+            },
         };
 
-        const result = mapGeminiResponseToAnthropic(geminiResponse, "claude-3-haiku-20240307", "req-789");
+        const result = mapGeminiResponseToAnthropic(
+            geminiResponse,
+            "claude-3-haiku-20240307",
+            "req-789"
+        );
 
         expect(result.stop_reason).toBe("tool_use");
         expect(result.content).toHaveLength(2);
-        
+
         expect(result.content[0]).toEqual({
             type: "tool_use",
             id: "tool_call_456",
             name: "calculate",
-            input: {expression: "2 + 2"}
+            input: { expression: "2 + 2" },
         });
-        
+
         expect(result.content[1]).toEqual({
             type: "tool_use",
             id: "tool_call_789",
             name: "search",
-            input: {query: "artificial intelligence"}
+            input: { query: "artificial intelligence" },
         });
     });
 
@@ -553,30 +626,38 @@ describe("mapGeminiResponseToAnthropic", () => {
         const geminiResponse = {
             usage: {
                 inputTokens: 5,
-                outputTokens: 0
-            }
+                outputTokens: 0,
+            },
         };
 
-        const result = mapGeminiResponseToAnthropic(geminiResponse, "claude-3-opus-20240229", "req-empty");
+        const result = mapGeminiResponseToAnthropic(
+            geminiResponse,
+            "claude-3-opus-20240229",
+            "req-empty"
+        );
 
         expect(result.content).toHaveLength(0);
         expect(result.stop_reason).toBe("end_turn");
         expect(result.usage).toEqual({
             input_tokens: 5,
-            output_tokens: 0
+            output_tokens: 0,
         });
     });
 
     it("should handle response with missing usage information", () => {
         const geminiResponse = {
-            content: "Response without usage info"
+            content: "Response without usage info",
         };
 
-        const result = mapGeminiResponseToAnthropic(geminiResponse, "claude-3-5-sonnet-20241022", "req-no-usage");
+        const result = mapGeminiResponseToAnthropic(
+            geminiResponse,
+            "claude-3-5-sonnet-20241022",
+            "req-no-usage"
+        );
 
         expect(result.usage).toEqual({
             input_tokens: 0,
-            output_tokens: 0
+            output_tokens: 0,
         });
     });
 
@@ -584,15 +665,19 @@ describe("mapGeminiResponseToAnthropic", () => {
         const geminiResponse = {
             content: "Response with partial usage",
             usage: {
-                inputTokens: 10
-            }
+                inputTokens: 10,
+            },
         };
 
-        const result = mapGeminiResponseToAnthropic(geminiResponse, "claude-3-5-sonnet-20241022", "req-partial-usage");
+        const result = mapGeminiResponseToAnthropic(
+            geminiResponse,
+            "claude-3-5-sonnet-20241022",
+            "req-partial-usage"
+        );
 
         expect(result.usage).toEqual({
             input_tokens: 10,
-            output_tokens: 0
+            output_tokens: 0,
         });
     });
 
@@ -603,14 +688,18 @@ describe("mapGeminiResponseToAnthropic", () => {
                     id: "tool_call_bad_json",
                     function: {
                         name: "bad_tool",
-                        arguments: "invalid json"
-                    }
-                }
-            ]
+                        arguments: "invalid json",
+                    },
+                },
+            ],
         };
 
         expect(() => {
-            mapGeminiResponseToAnthropic(geminiResponse, "claude-3-5-sonnet-20241022", "req-bad-json");
+            mapGeminiResponseToAnthropic(
+                geminiResponse,
+                "claude-3-5-sonnet-20241022",
+                "req-bad-json"
+            );
         }).toThrow();
     });
 });

@@ -1,4 +1,4 @@
-import { OAuth2Client } from "google-auth-library";
+import { OAuth2Client, Credentials } from "google-auth-library";
 import * as OpenAI from "../types/openai.js";
 import * as Gemini from "../types/gemini.js";
 import {
@@ -12,6 +12,8 @@ import {
 } from "./auto-model-switching.js";
 import { getLogger, Logger } from "../utils/logger.js";
 import { OAuthRotator } from "../utils/oauth-rotator.js";
+import { getCachedCredentialPath } from "../utils/paths.js";
+import { promises as fs } from "node:fs";
 import chalk from "chalk";
 
 /**
@@ -38,7 +40,6 @@ export class GeminiApiClient {
     private readonly chatID: string;
     private readonly autoSwitcher: AutoModelSwitchingHelper;
     private readonly logger: Logger;
-    private readonly oauthRotator: OAuthRotator;
 
     constructor(
         private readonly authClient: OAuth2Client,
@@ -49,8 +50,23 @@ export class GeminiApiClient {
         this.chatID = `chat-${crypto.randomUUID()}`;
         this.creationTime = Math.floor(Date.now() / 1000);
         this.autoSwitcher = AutoModelSwitchingHelper.getInstance();
-        this.oauthRotator = OAuthRotator.getInstance();
         this.logger = getLogger("GEMINI-CLIENT", chalk.blue);
+    }
+
+    /**
+     * Reload credentials from disk after OAuth rotation
+     */
+    private async reloadCredentials(): Promise<void> {
+        try {
+            const credentialPath = getCachedCredentialPath();
+            const creds = await fs.readFile(credentialPath, "utf-8");
+            const credentials = JSON.parse(creds) as Credentials;
+            this.authClient.setCredentials(credentials);
+            this.logger.info("Credentials reloaded from disk after rotation");
+        } catch (error) {
+            this.logger.error("Failed to reload credentials from disk", error);
+            throw error;
+        }
     }
 
     /**
@@ -140,33 +156,54 @@ export class GeminiApiClient {
             if (
                 response.status === 429 &&
                 !isRetry &&
-                this.oauthRotator.isRotationEnabled()
+                OAuthRotator.getInstance().isRotationEnabled()
             ) {
                 this.logger.info(
                     "Rate limit (429) detected, attempting OAuth rotation..."
                 );
 
-                // Rotate to next account
-                const rotatedPath = await this.oauthRotator.rotateCredentials();
+                try {
+                    // Rotate to next account
+                    const rotatedPath =
+                        await OAuthRotator.getInstance().rotateCredentials();
 
-                if (rotatedPath) {
-                    // Force token refresh by clearing current token
-                    this.authClient.credentials.access_token = undefined;
+                    if (rotatedPath) {
+                        // Reload credentials from disk after rotation
+                        await this.reloadCredentials();
 
-                    // Retry request once with new credentials
-                    try {
-                        return await this.callEndpoint(method, body, true);
-                    } catch (retryError) {
-                        this.logger.error(
-                            "Retry after OAuth rotation failed",
-                            retryError
-                        );
-                        throw new GeminiApiError(
-                            `API call failed with status ${response.status}: ${errorText}`,
-                            response.status,
-                            errorText
-                        );
+                        // Retry request once with new credentials
+                        try {
+                            return await this.callEndpoint(method, body, true);
+                        } catch (retryError) {
+                            // Check if all accounts are exhausted
+                            if (
+                                OAuthRotator.getInstance().isRotationEnabled()
+                            ) {
+                                const accountCount =
+                                    OAuthRotator.getInstance().getAccountCount();
+                                throw new GeminiApiError(
+                                    `All ${accountCount} OAuth accounts have been exhausted with rate limits. Please wait before retrying.`,
+                                    response.status,
+                                    errorText
+                                );
+                            }
+                            this.logger.error(
+                                "Retry after OAuth rotation failed",
+                                retryError
+                            );
+                            throw new GeminiApiError(
+                                `API call failed with status ${response.status}: ${errorText}`,
+                                response.status,
+                                errorText
+                            );
+                        }
                     }
+                } catch (rotationError) {
+                    // Rotation failed, log and proceed with original error
+                    this.logger.error(
+                        "OAuth rotation failed, proceeding with original error",
+                        rotationError
+                    );
                 }
             }
 
@@ -345,6 +382,8 @@ export class GeminiApiClient {
         );
 
         if (!response.ok) {
+            const errorText = await response.text();
+
             // Handle 401 errors with token refresh
             if (response.status === 401 && !isRetry) {
                 this.logger.info(
@@ -362,29 +401,56 @@ export class GeminiApiClient {
             if (
                 response.status === 429 &&
                 !isRetry &&
-                this.oauthRotator.isRotationEnabled()
+                OAuthRotator.getInstance().isRotationEnabled()
             ) {
                 this.logger.info(
                     "Rate limit (429) detected in stream, attempting OAuth rotation..."
                 );
 
-                // Rotate to next account
-                const rotatedPath = await this.oauthRotator.rotateCredentials();
+                try {
+                    // Rotate to next account
+                    const rotatedPath =
+                        await OAuthRotator.getInstance().rotateCredentials();
 
-                if (rotatedPath) {
-                    // Force token refresh by clearing current token
-                    this.authClient.credentials.access_token = undefined;
+                    if (rotatedPath) {
+                        // Reload credentials from disk after rotation
+                        await this.reloadCredentials();
 
-                    // Retry stream with new credentials
-                    yield* this.streamContentInternal(
-                        geminiCompletionRequest,
-                        true
+                        // Retry stream with new credentials
+                        try {
+                            yield* this.streamContentInternal(
+                                geminiCompletionRequest,
+                                true
+                            );
+                            return;
+                        } catch (retryError) {
+                            // Check if all accounts are exhausted
+                            if (
+                                OAuthRotator.getInstance().isRotationEnabled()
+                            ) {
+                                const accountCount =
+                                    OAuthRotator.getInstance().getAccountCount();
+                                throw new GeminiApiError(
+                                    `All ${accountCount} OAuth accounts have been exhausted with rate limits. Please wait before retrying.`,
+                                    response.status,
+                                    errorText
+                                );
+                            }
+                            this.logger.error(
+                                "Retry after OAuth rotation failed in stream",
+                                retryError
+                            );
+                        }
+                    }
+                } catch (rotationError) {
+                    // Rotation failed, log and proceed with original error
+                    this.logger.error(
+                        "OAuth rotation failed in stream, proceeding with original error",
+                        rotationError
                     );
-                    return;
                 }
             }
 
-            const errorText = await response.text();
             throw new GeminiApiError(
                 `Stream request failed: ${response.status} ${errorText}`,
                 response.status,

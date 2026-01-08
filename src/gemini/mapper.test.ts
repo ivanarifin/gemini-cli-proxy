@@ -1,12 +1,12 @@
-import {describe, it, expect} from "vitest";
-import {mapModelToGemini, mapJsonSchemaToGemini} from "./mapper.js";
-import type {JsonSchema} from "../types/types.js";
+import { describe, it, expect } from "vitest";
+import { mapModelToGemini, mapJsonSchemaToGemini } from "./mapper.js";
+import type { JsonSchema } from "../types/types.js";
 import * as Gemini from "../types/gemini.js";
 
 describe("mapModelToGemini", () => {
-    it("should return Gemini25Pro for undefined model", () => {
+    it("should return Gemini3ProPreview for undefined model", () => {
         const result = mapModelToGemini(undefined);
-        expect(result).toBe(Gemini.Model.Gemini25Pro);
+        expect(result).toBe(Gemini.Model.Gemini3ProPreview);
     });
 
     it("should return valid Gemini model for existing model key", () => {
@@ -14,13 +14,13 @@ describe("mapModelToGemini", () => {
         expect(result).toBe(Gemini.Model.Gemini25Flash);
     });
 
-    it("should return Gemini25Pro for unknown model", () => {
+    it("should return Gemini3ProPreview for unknown model", () => {
         const result = mapModelToGemini("unknown-model" as Gemini.Model);
-        expect(result).toBe(Gemini.Model.Gemini25Pro);
+        expect(result).toBe(Gemini.Model.Gemini3ProPreview);
     });
 
     it("should handle all valid Gemini models", () => {
-        Object.values(Gemini.Model).forEach(model => {
+        Object.values(Gemini.Model).forEach((model) => {
             const result = mapModelToGemini(model);
             expect(result).toBe(model);
         });
@@ -60,8 +60,8 @@ describe("mapJsonSchemaToGemini", () => {
             const schema: JsonSchema = {
                 type: "object",
                 properties: {
-                    name: {type: "string"}
-                }
+                    name: { type: "string" },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -69,8 +69,8 @@ describe("mapJsonSchemaToGemini", () => {
             expect(result).toEqual({
                 type: "object",
                 properties: {
-                    name: {type: "string"}
-                }
+                    name: { type: "string" },
+                },
             });
         });
 
@@ -78,9 +78,9 @@ describe("mapJsonSchemaToGemini", () => {
             const schema: JsonSchema = {
                 type: "object",
                 properties: {
-                    name: {type: "string"}
+                    name: { type: "string" },
                 },
-                $schema: "http://json-schema.org/draft-07/schema#"
+                $schema: "http://json-schema.org/draft-07/schema#",
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -88,8 +88,8 @@ describe("mapJsonSchemaToGemini", () => {
             expect(result).toEqual({
                 type: "object",
                 properties: {
-                    name: {type: "string"}
-                }
+                    name: { type: "string" },
+                },
             });
             expect(result).not.toHaveProperty("$schema");
         });
@@ -101,18 +101,18 @@ describe("mapJsonSchemaToGemini", () => {
                 type: "object",
                 properties: {
                     user: {
-                        $ref: "#/definitions/User"
-                    }
+                        $ref: "#/definitions/User",
+                    },
                 },
                 definitions: {
                     User: {
                         type: "object",
                         properties: {
-                            name: {type: "string"},
-                            age: {type: "number"}
-                        }
-                    }
-                }
+                            name: { type: "string" },
+                            age: { type: "number" },
+                        },
+                    },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -123,11 +123,11 @@ describe("mapJsonSchemaToGemini", () => {
                     user: {
                         type: "object",
                         properties: {
-                            name: {type: "string"},
-                            age: {type: "number"}
-                        }
-                    }
-                }
+                            name: { type: "string" },
+                            age: { type: "number" },
+                        },
+                    },
+                },
             });
         });
 
@@ -136,17 +136,17 @@ describe("mapJsonSchemaToGemini", () => {
                 type: "object",
                 properties: {
                     user: {
-                        $ref: "#/definitions/NonExistent"
-                    }
+                        $ref: "#/definitions/NonExistent",
+                    },
                 },
                 definitions: {
                     User: {
                         type: "object",
                         properties: {
-                            name: {type: "string"}
-                        }
-                    }
-                }
+                            name: { type: "string" },
+                        },
+                    },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -155,8 +155,8 @@ describe("mapJsonSchemaToGemini", () => {
             expect(result).toEqual({
                 type: "object",
                 properties: {
-                    user: {}
-                }
+                    user: {},
+                },
             });
         });
 
@@ -165,8 +165,8 @@ describe("mapJsonSchemaToGemini", () => {
                 type: "object",
                 properties: {
                     team: {
-                        $ref: "#/definitions/Team"
-                    }
+                        $ref: "#/definitions/Team",
+                    },
                 },
                 definitions: {
                     Team: {
@@ -175,18 +175,18 @@ describe("mapJsonSchemaToGemini", () => {
                             members: {
                                 type: "array",
                                 items: {
-                                    $ref: "#/definitions/User"
-                                }
-                            }
-                        }
+                                    $ref: "#/definitions/User",
+                                },
+                            },
+                        },
                     },
                     User: {
                         type: "object",
                         properties: {
-                            name: {type: "string"}
-                        }
-                    }
-                }
+                            name: { type: "string" },
+                        },
+                    },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -202,13 +202,13 @@ describe("mapJsonSchemaToGemini", () => {
                                 items: {
                                     type: "object",
                                     properties: {
-                                        name: {type: "string"}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                                        name: { type: "string" },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
             });
         });
 
@@ -218,14 +218,14 @@ describe("mapJsonSchemaToGemini", () => {
                     User: {
                         type: "object",
                         properties: {
-                            name: {type: "string"}
-                        }
-                    }
+                            name: { type: "string" },
+                        },
+                    },
                 },
                 allOf: [
-                    {$ref: "#/definitions/User"},
-                    {type: "object", properties: {age: {type: "number"}}}
-                ]
+                    { $ref: "#/definitions/User" },
+                    { type: "object", properties: { age: { type: "number" } } },
+                ],
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -234,8 +234,8 @@ describe("mapJsonSchemaToGemini", () => {
             expect(result).toEqual({
                 type: "object",
                 properties: {
-                    age: {type: "number"}
-                }
+                    age: { type: "number" },
+                },
             });
         });
     });
@@ -246,18 +246,18 @@ describe("mapJsonSchemaToGemini", () => {
                 type: "object",
                 properties: {
                     nullableString: {
-                        type: ["string", "null"]
+                        type: ["string", "null"],
                     },
                     multipleTypes: {
-                        type: ["string", "number"]
+                        type: ["string", "number"],
                     },
                     nullOnlyType: {
-                        type: ["null"]
+                        type: ["null"],
                     },
                     emptyTypeArray: {
-                        type: []
-                    }
-                }
+                        type: [],
+                    },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -267,18 +267,18 @@ describe("mapJsonSchemaToGemini", () => {
                 properties: {
                     nullableString: {
                         type: "string",
-                        nullable: true
+                        nullable: true,
                     },
                     multipleTypes: {
-                        type: "string"
+                        type: "string",
                     },
                     nullOnlyType: {
-                        type: "string"
+                        type: "string",
                     },
                     emptyTypeArray: {
-                        type: "string"
-                    }
-                }
+                        type: "string",
+                    },
+                },
             });
         });
     });
@@ -290,12 +290,12 @@ describe("mapJsonSchemaToGemini", () => {
                 properties: {
                     status: {
                         oneOf: [
-                            {const: "active"},
-                            {const: "inactive"},
-                            {const: "pending"}
-                        ]
-                    }
-                }
+                            { const: "active" },
+                            { const: "inactive" },
+                            { const: "pending" },
+                        ],
+                    },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -305,9 +305,9 @@ describe("mapJsonSchemaToGemini", () => {
                 properties: {
                     status: {
                         type: "string",
-                        enum: ["active", "inactive", "pending"]
-                    }
-                }
+                        enum: ["active", "inactive", "pending"],
+                    },
+                },
             });
         });
 
@@ -316,12 +316,9 @@ describe("mapJsonSchemaToGemini", () => {
                 type: "object",
                 properties: {
                     value: {
-                        oneOf: [
-                            {const: "fixed"},
-                            {type: "number"}
-                        ]
-                    }
-                }
+                        oneOf: [{ const: "fixed" }, { type: "number" }],
+                    },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -330,9 +327,9 @@ describe("mapJsonSchemaToGemini", () => {
                 type: "object",
                 properties: {
                     value: {
-                        type: "number"
-                    }
-                }
+                        type: "number",
+                    },
+                },
             });
         });
 
@@ -342,11 +339,11 @@ describe("mapJsonSchemaToGemini", () => {
                 properties: {
                     value: {
                         oneOf: [
-                            {description: "just a description"},
-                            {title: "just a title"}
-                        ]
-                    }
-                }
+                            { description: "just a description" },
+                            { title: "just a title" },
+                        ],
+                    },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -355,9 +352,9 @@ describe("mapJsonSchemaToGemini", () => {
                 type: "object",
                 properties: {
                     value: {
-                        type: "string"
-                    }
-                }
+                        type: "string",
+                    },
+                },
             });
         });
 
@@ -366,9 +363,9 @@ describe("mapJsonSchemaToGemini", () => {
                 type: "object",
                 properties: {
                     value: {
-                        oneOf: []
-                    }
-                }
+                        oneOf: [],
+                    },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -377,9 +374,9 @@ describe("mapJsonSchemaToGemini", () => {
                 type: "object",
                 properties: {
                     value: {
-                        type: "string"
-                    }
-                }
+                        type: "string",
+                    },
+                },
             });
         });
     });
@@ -394,24 +391,24 @@ describe("mapJsonSchemaToGemini", () => {
                             {
                                 type: "object",
                                 properties: {
-                                    name: {type: "string"}
-                                }
+                                    name: { type: "string" },
+                                },
                             },
                             {
                                 type: "object",
                                 properties: {
-                                    age: {type: "number"}
-                                }
-                            }
-                        ]
-                    }
-                }
+                                    age: { type: "number" },
+                                },
+                            },
+                        ],
+                    },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
 
             const combinedProps = result?.properties?.combined?.properties;
-            expect(combinedProps).toHaveProperty("age", {type: "number"});
+            expect(combinedProps).toHaveProperty("age", { type: "number" });
         });
 
         it("should handle allOf in definitions", () => {
@@ -420,31 +417,33 @@ describe("mapJsonSchemaToGemini", () => {
                     BaseUser: {
                         type: "object",
                         properties: {
-                            name: {type: "string"}
-                        }
+                            name: { type: "string" },
+                        },
                     },
                     ExtendedUser: {
                         allOf: [
-                            {$ref: "#/definitions/BaseUser"},
+                            { $ref: "#/definitions/BaseUser" },
                             {
                                 type: "object",
                                 properties: {
-                                    age: {type: "number"}
-                                }
-                            }
-                        ]
-                    }
+                                    age: { type: "number" },
+                                },
+                            },
+                        ],
+                    },
                 },
                 type: "object",
                 properties: {
-                    user: {$ref: "#/definitions/ExtendedUser"}
-                }
+                    user: { $ref: "#/definitions/ExtendedUser" },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
 
             // Due to Object.assign behavior, only the last properties remain
-            expect(result?.properties?.user?.properties).toHaveProperty("age", {type: "number"});
+            expect(result?.properties?.user?.properties).toHaveProperty("age", {
+                type: "number",
+            });
         });
     });
 
@@ -457,11 +456,11 @@ describe("mapJsonSchemaToGemini", () => {
                         type: "object",
                         properties: {
                             deepProp: {
-                                type: ["string", "null"]
-                            }
-                        }
-                    }
-                }
+                                type: ["string", "null"],
+                            },
+                        },
+                    },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -474,11 +473,11 @@ describe("mapJsonSchemaToGemini", () => {
                         properties: {
                             deepProp: {
                                 type: "string",
-                                nullable: true
-                            }
-                        }
-                    }
-                }
+                                nullable: true,
+                            },
+                        },
+                    },
+                },
             });
         });
 
@@ -491,11 +490,11 @@ describe("mapJsonSchemaToGemini", () => {
                         items: {
                             type: "object",
                             properties: {
-                                id: {type: "number"}
-                            }
-                        }
-                    }
-                }
+                                id: { type: "number" },
+                            },
+                        },
+                    },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -508,18 +507,18 @@ describe("mapJsonSchemaToGemini", () => {
                         items: {
                             type: "object",
                             properties: {
-                                id: {type: "number"}
-                            }
-                        }
-                    }
-                }
+                                id: { type: "number" },
+                            },
+                        },
+                    },
+                },
             });
         });
 
         it("should handle null properties object", () => {
             const schema: JsonSchema = {
                 type: "object",
-                properties: null as unknown as Record<string, JsonSchema>
+                properties: null as unknown as Record<string, JsonSchema>,
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -527,14 +526,14 @@ describe("mapJsonSchemaToGemini", () => {
             // Null properties are preserved in the result
             expect(result).toEqual({
                 type: "object",
-                properties: null
+                properties: null,
             });
         });
 
         it("should handle null items object", () => {
             const schema: JsonSchema = {
                 type: "array",
-                items: null as unknown as JsonSchema
+                items: null as unknown as JsonSchema,
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -542,7 +541,7 @@ describe("mapJsonSchemaToGemini", () => {
             // Null items are preserved in the result
             expect(result).toEqual({
                 type: "array",
-                items: null
+                items: null,
             });
         });
     });
@@ -552,9 +551,9 @@ describe("mapJsonSchemaToGemini", () => {
             const schema: JsonSchema = {
                 type: "object",
                 properties: {
-                    name: {type: "string"}
+                    name: { type: "string" },
                 },
-                additionalProperties: false
+                additionalProperties: false,
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -562,9 +561,9 @@ describe("mapJsonSchemaToGemini", () => {
             expect(result).toEqual({
                 type: "object",
                 properties: {
-                    name: {type: "string"}
+                    name: { type: "string" },
                 },
-                additionalProperties: false
+                additionalProperties: false,
             });
         });
 
@@ -572,11 +571,11 @@ describe("mapJsonSchemaToGemini", () => {
             const schema: JsonSchema = {
                 type: "object",
                 properties: {
-                    name: {type: "string"}
+                    name: { type: "string" },
                 },
                 additionalProperties: {
-                    type: "string"
-                }
+                    type: "string",
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -584,11 +583,11 @@ describe("mapJsonSchemaToGemini", () => {
             expect(result).toEqual({
                 type: "object",
                 properties: {
-                    name: {type: "string"}
+                    name: { type: "string" },
                 },
                 additionalProperties: {
-                    type: "string"
-                }
+                    type: "string",
+                },
             });
         });
     });
@@ -596,50 +595,47 @@ describe("mapJsonSchemaToGemini", () => {
     describe("edge cases and complex scenarios", () => {
         it("should handle array input in convertJsonSchemaObject", () => {
             const schema: JsonSchema = [
-                {type: "string"},
-                {type: "number"}
+                { type: "string" },
+                { type: "number" },
             ] as unknown as JsonSchema;
 
             const result = mapJsonSchemaToGemini(schema);
 
             expect(Array.isArray(result)).toBe(true);
-            expect(result).toEqual([
-                {type: "string"},
-                {type: "number"}
-            ]);
+            expect(result).toEqual([{ type: "string" }, { type: "number" }]);
         });
 
         it("should handle array input in resolveJsonSchemaDefinitions", () => {
             const schema: JsonSchema = {
                 definitions: {
                     StringList: [
-                        {type: "string"},
-                        {type: "string"}
-                    ] as unknown as JsonSchema
+                        { type: "string" },
+                        { type: "string" },
+                    ] as unknown as JsonSchema,
                 },
                 type: "object",
                 properties: {
-                    list: {$ref: "#/definitions/StringList"}
-                }
+                    list: { $ref: "#/definitions/StringList" },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
 
             expect(result?.properties?.list).toEqual([
-                {type: "string"},
-                {type: "string"}
+                { type: "string" },
+                { type: "string" },
             ]);
         });
 
         it("should handle non-object, non-array input in both helper functions", () => {
             const schema: JsonSchema = {
                 definitions: {
-                    SimpleString: "just a string" as unknown as JsonSchema
+                    SimpleString: "just a string" as unknown as JsonSchema,
                 },
                 type: "object",
                 properties: {
-                    simple: {$ref: "#/definitions/SimpleString"}
-                }
+                    simple: { $ref: "#/definitions/SimpleString" },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -654,8 +650,8 @@ describe("mapJsonSchemaToGemini", () => {
                 description: "A test schema",
                 required: ["name"],
                 properties: {
-                    name: {type: "string"}
-                }
+                    name: { type: "string" },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -666,8 +662,8 @@ describe("mapJsonSchemaToGemini", () => {
                 description: "A test schema",
                 required: ["name"],
                 properties: {
-                    name: {type: "string"}
-                }
+                    name: { type: "string" },
+                },
             });
         });
 
@@ -678,14 +674,14 @@ describe("mapJsonSchemaToGemini", () => {
                         type: "object",
                         title: "User Schema",
                         properties: {
-                            name: {type: "string"}
-                        }
-                    }
+                            name: { type: "string" },
+                        },
+                    },
                 },
                 type: "object",
                 properties: {
-                    user: {$ref: "#/definitions/User"}
-                }
+                    user: { $ref: "#/definitions/User" },
+                },
             };
 
             const result = mapJsonSchemaToGemini(schema);
@@ -694,8 +690,8 @@ describe("mapJsonSchemaToGemini", () => {
                 type: "object",
                 title: "User Schema",
                 properties: {
-                    name: {type: "string"}
-                }
+                    name: { type: "string" },
+                },
             });
         });
     });

@@ -170,6 +170,14 @@ When a 429 error is detected:
 
 **Note:** OAuth rotation requires at least 2 credential files (or 2+ JSON files in a folder) to be effective.
 
+**Account Exhaustion Handling:**
+
+- When all OAuth accounts have been exhausted, the rotator will throw an error
+- Error message: "All OAuth accounts have been exhausted. Please add new OAuth credential files to the rotation folder or restart the server to reset the exhaustion state."
+- To reset exhaustion state and continue rotation, add new OAuth credential files to the folder
+- The rotator will then continue cycling through all accounts
+- This prevents infinite rotation loops and ensures you're notified when accounts are exhausted
+
 ## Development
 
 ### Scripts

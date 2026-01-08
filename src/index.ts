@@ -11,7 +11,6 @@ import {
     DISABLE_AUTO_MODEL_SWITCH,
     DISABLE_BROWSER_AUTH,
     DISABLE_GOOGLE_SEARCH,
-    OAUTH_ROTATION_PATHS,
 } from "./utils/constant.js";
 import { OAuthRotator } from "./utils/oauth-rotator.js";
 import { getLogger } from "./utils/logger.js";
@@ -57,7 +56,7 @@ export async function startServer() {
     logger.info("starting server...");
 
     try {
-        // Initialize OAuth rotation if paths are provided
+        // Initialize OAuth rotation if paths or folder are provided
         if (opts.oauthRotationPaths) {
             const paths = opts.oauthRotationPaths
                 .split(",")
@@ -66,6 +65,13 @@ export async function startServer() {
             if (paths.length > 0) {
                 OAuthRotator.getInstance().initialize(paths);
             }
+        }
+
+        // Initialize OAuth rotation from folder if provided
+        if (opts.oauthRotationFolder) {
+            await OAuthRotator.getInstance().initializeWithFolder(
+                opts.oauthRotationFolder
+            );
         }
 
         const authClient = await setupAuthentication(

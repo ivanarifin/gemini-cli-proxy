@@ -14,6 +14,9 @@ export class OAuthRotator {
     private logger = getLogger("ROTATOR", chalk.magenta);
     private isEnabled: boolean = false;
     private folderPath: string | null = null;
+    private allAccountsExhausted: boolean = false;
+    private rotationInProgress: boolean = false;
+    private rotationPromise: Promise<string | null> | null = null;
 
     /**
      * Singleton pattern - get the global instance
@@ -91,6 +94,44 @@ export class OAuthRotator {
     }
 
     /**
+     * Validate that a file contains valid OAuth credentials
+     * @param filePath Path to the credential file
+     * @returns true if valid, false otherwise
+     */
+    private async validateCredentialFile(filePath: string): Promise<boolean> {
+        try {
+            const content = await fs.readFile(filePath, "utf-8");
+            const credentials = JSON.parse(content);
+
+            // Check for required OAuth credential fields
+            const hasRequiredFields =
+                credentials.access_token ||
+                credentials.refresh_token ||
+                credentials.client_id ||
+                credentials.client_secret;
+
+            if (!hasRequiredFields) {
+                this.logger.warn(
+                    `Invalid credential file: ${path.basename(
+                        filePath
+                    )} - missing required OAuth fields`
+                );
+                return false;
+            }
+
+            return true;
+        } catch (error) {
+            this.logger.warn(
+                `Failed to validate credential file: ${path.basename(
+                    filePath
+                )}`,
+                error
+            );
+            return false;
+        }
+    }
+
+    /**
      * Check if rotation is enabled
      */
     public isRotationEnabled(): boolean {
@@ -107,10 +148,49 @@ export class OAuthRotator {
     /**
      * Rotate to the next OAuth credential file
      * @returns Path to the new credential file, or null if rotation is disabled
+     * @throws Error if all accounts have been exhausted or rotation fails
      */
     public async rotateCredentials(): Promise<string | null> {
         if (!this.isRotationEnabled()) {
             return null;
+        }
+
+        // Prevent concurrent rotations - if a rotation is in progress, wait for it
+        if (this.rotationInProgress && this.rotationPromise) {
+            this.logger.info(
+                "Rotation already in progress, waiting for completion..."
+            );
+            return this.rotationPromise;
+        }
+
+        // Start a new rotation
+        this.rotationInProgress = true;
+        this.rotationPromise = this.performRotation();
+
+        try {
+            const result = await this.rotationPromise;
+            return result;
+        } finally {
+            this.rotationInProgress = false;
+            this.rotationPromise = null;
+        }
+    }
+
+    /**
+     * Internal method to perform the actual rotation
+     * @returns Path to the new credential file, or null if rotation fails
+     * @throws Error if all accounts have been exhausted
+     */
+    private async performRotation(): Promise<string | null> {
+        // Check if all accounts have been exhausted
+        if (this.allAccountsExhausted) {
+            const message =
+                "All OAuth accounts have been exhausted. Cycling back to first account.";
+            this.logger.warn(message);
+            // Reset exhaustion state so subsequent requests continue cycling
+            this.resetExhaustionState();
+            // Don't throw here - instead, cycle to first account and let caller handle error reporting if needed
+            // The currentIndex is already 0 (cycled back via modulo), so we'll rotate to index 1
         }
 
         // Move to next account in round-robin fashion
@@ -118,7 +198,32 @@ export class OAuthRotator {
             (this.currentIndex + 1) % this.credentialFilePaths.length;
         const newCredentialPath = this.credentialFilePaths[this.currentIndex];
 
+        // Mark as exhausted if we've cycled through all accounts
+        if (this.currentIndex === 0) {
+            this.allAccountsExhausted = true;
+            this.logger.warn(
+                "All OAuth accounts have been exhausted. Rotation will continue cycling through all accounts."
+            );
+        }
+
         try {
+            // Validate the credential file before using it
+            const isValid = await this.validateCredentialFile(
+                newCredentialPath
+            );
+            if (!isValid) {
+                this.logger.error(
+                    `Credential file validation failed for ${path.basename(
+                        newCredentialPath
+                    )}`
+                );
+                throw new Error(
+                    `Invalid credential file: ${path.basename(
+                        newCredentialPath
+                    )}`
+                );
+            }
+
             // Get the default gemini-cli credential path
             const defaultCredentialPath = this.getDefaultCredentialPath();
 
@@ -147,7 +252,8 @@ export class OAuthRotator {
                 `Failed to rotate credentials to ${newCredentialPath}`,
                 error
             );
-            return null;
+            // Re-throw the error so the caller knows rotation failed
+            throw error;
         }
     }
 
@@ -172,6 +278,16 @@ export class OAuthRotator {
      */
     public getAccountCount(): number {
         return this.credentialFilePaths.length;
+    }
+
+    /**
+     * Reset exhaustion state (call when adding new accounts)
+     */
+    public resetExhaustionState(): void {
+        this.allAccountsExhausted = false;
+        this.logger.info(
+            "Exhaustion state reset. OAuth rotation will use all accounts again."
+        );
     }
 
     /**
