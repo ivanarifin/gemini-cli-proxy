@@ -13,7 +13,9 @@
         "dev": "node --loader ts-node/esm src/index.ts",
         "lint": "eslint . --ext .ts",
         "test": "vitest run",
-        "test:cov": "vitest run --coverage"
+        "test:cov": "vitest run --coverage",
+        "deploy": "git pull origin main && yarn install && pm2 restart gemini-proxy"
+
     },
     "engines": {
         "node": ">20.0.0"
