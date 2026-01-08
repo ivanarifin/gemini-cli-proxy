@@ -363,7 +363,9 @@ export class OAuthRotator {
 
             const filename = path.basename(newCredentialPath);
             this.logger.info(
-                `Rate limit hit. Switched to account: ${filename}`
+                `OAuth switch: ${filename} (account ${
+                    this.currentIndex + 1
+                } of ${this.credentialFilePaths.length})`
             );
 
             return newCredentialPath;

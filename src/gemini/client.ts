@@ -55,14 +55,88 @@ export class GeminiApiClient {
 
     /**
      * Reload credentials from disk after OAuth rotation
+     * Also triggers token refresh if access token is expired
+     * Writes refreshed credentials back to the source file and cache
+     * @param sourceFilePath Path to the original OAuth credential file (optional)
      */
-    private async reloadCredentials(): Promise<void> {
+    private async reloadCredentials(
+        sourceFilePath?: string | null
+    ): Promise<void> {
+        const credentialPath = getCachedCredentialPath();
+
         try {
-            const credentialPath = getCachedCredentialPath();
             const creds = await fs.readFile(credentialPath, "utf-8");
             const credentials = JSON.parse(creds) as Credentials;
             this.authClient.setCredentials(credentials);
             this.logger.info("Credentials reloaded from disk after rotation");
+
+            // Trigger token refresh if access token is expired or missing
+            // This ensures we have a valid access token after rotation
+            try {
+                const { token } = await this.authClient.getAccessToken();
+                if (token) {
+                    this.logger.info("Access token validated after rotation");
+                } else {
+                    // Token is missing or expired, force refresh
+                    this.logger.info(
+                        "Access token missing, triggering refresh..."
+                    );
+                    const refreshed =
+                        await this.authClient.refreshAccessToken();
+                    this.logger.info("Access token refreshed successfully");
+
+                    // Update credentials with refreshed tokens
+                    this.authClient.setCredentials(refreshed.credentials);
+
+                    // Write refreshed credentials to cache
+                    await fs.writeFile(
+                        credentialPath,
+                        JSON.stringify(refreshed.credentials, null, 2),
+                        { mode: 0o600 }
+                    );
+                    this.logger.info(
+                        "Refreshed credentials cached to: " + credentialPath
+                    );
+
+                    // Also write back to source file if provided
+                    if (sourceFilePath) {
+                        try {
+                            // Merge with existing credential file to preserve other fields
+                            const existingContent = await fs.readFile(
+                                sourceFilePath,
+                                "utf-8"
+                            );
+                            const existingCreds = JSON.parse(existingContent);
+                            const updatedCreds = {
+                                ...existingCreds,
+                                ...refreshed.credentials,
+                            };
+                            await fs.writeFile(
+                                sourceFilePath,
+                                JSON.stringify(updatedCreds, null, 2),
+                                { mode: 0o600 }
+                            );
+                            this.logger.info(
+                                "Refreshed credentials written back to source: " +
+                                    sourceFilePath
+                            );
+                        } catch (sourceError) {
+                            this.logger.warn(
+                                "Failed to write refreshed credentials to source file: " +
+                                    sourceFilePath,
+                                sourceError
+                            );
+                            // Continue anyway - cache is updated
+                        }
+                    }
+                }
+            } catch (refreshError) {
+                this.logger.warn(
+                    "Failed to validate/refresh access token after rotation",
+                    refreshError
+                );
+                // Continue anyway - the API call will handle 401 and retry
+            }
         } catch (error) {
             this.logger.error("Failed to reload credentials from disk", error);
             throw error;
@@ -168,8 +242,12 @@ export class GeminiApiClient {
                         await OAuthRotator.getInstance().rotateCredentials();
 
                     if (rotatedPath) {
+                        this.logger.info(
+                            `OAuth rotation complete, using: ${rotatedPath}`
+                        );
+
                         // Reload credentials from disk after rotation
-                        await this.reloadCredentials();
+                        await this.reloadCredentials(rotatedPath);
 
                         // Retry request once with new credentials
                         try {
@@ -419,8 +497,12 @@ export class GeminiApiClient {
                         await OAuthRotator.getInstance().rotateCredentials();
 
                     if (rotatedPath) {
+                        this.logger.info(
+                            `OAuth rotation complete (stream), using: ${rotatedPath}`
+                        );
+
                         // Reload credentials from disk after rotation
-                        await this.reloadCredentials();
+                        await this.reloadCredentials(rotatedPath);
 
                         // Retry stream with new credentials
                         try {
