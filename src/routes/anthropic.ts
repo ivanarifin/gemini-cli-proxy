@@ -59,7 +59,7 @@ export function createAnthropicRouter(
 
             const projectId = await geminiClient.discoverProjectId();
             const geminiRequest = mapAnthropicMessagesRequestToGemini(
-                projectId,
+                projectId ?? undefined,
                 body
             );
             const requestId = `msg_${crypto.randomUUID()}`;

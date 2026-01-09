@@ -54,6 +54,7 @@ export class OAuthRotator {
 
     /**
      * Initialize rotator with a folder path containing OAuth credential files
+     * Also copies the first OAuth file to the default cache location for initial auth
      * @param folderPath Path to folder containing OAuth credential files
      */
     public async initializeWithFolder(folderPath: string): Promise<void> {
@@ -91,6 +92,10 @@ export class OAuthRotator {
                 `OAuth rotation enabled with ${jsonFiles.length} account(s) from folder: ${folderPath}`
             );
 
+            // Copy the first OAuth file to the default cache location
+            // This ensures initial authentication uses the first rotated account
+            await this.copyFirstCredentialToCache();
+
             // Start watching the folder for changes
             this.startFolderWatcher(folderPath);
         } catch (error) {
@@ -98,6 +103,39 @@ export class OAuthRotator {
             this.stopFolderWatcher();
             this.logger.error(
                 `Failed to initialize OAuth rotation from folder ${folderPath}`,
+                error
+            );
+        }
+    }
+
+    /**
+     * Copy the first credential file to the default cache location
+     * This ensures initial auth uses credentials from the rotation folder
+     */
+    private async copyFirstCredentialToCache(): Promise<void> {
+        if (this.credentialFilePaths.length === 0) {
+            return;
+        }
+
+        const firstCredentialPath = this.credentialFilePaths[0];
+        const defaultPath = this.getDefaultCredentialPath();
+
+        try {
+            // Read the first credential file
+            const content = await fs.readFile(firstCredentialPath, "utf-8");
+
+            // Ensure directory exists and write to cache
+            await fs.mkdir(path.dirname(defaultPath), { recursive: true });
+            await fs.writeFile(defaultPath, content, { mode: 0o600 });
+
+            this.logger.info(
+                `Initial OAuth credentials set from: ${path.basename(
+                    firstCredentialPath
+                )}`
+            );
+        } catch (error) {
+            this.logger.warn(
+                "Failed to copy first credential to cache (will use existing cache if available)",
                 error
             );
         }

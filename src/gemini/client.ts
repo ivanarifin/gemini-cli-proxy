@@ -55,8 +55,9 @@ export class GeminiApiClient {
 
     /**
      * Reload credentials from disk after OAuth rotation
-     * Also triggers token refresh if access token is expired
+     * Always triggers token refresh to ensure valid access token
      * Writes refreshed credentials back to the source file and cache
+     * Also resets cached projectId to prevent 403 errors from stale project IDs
      * @param sourceFilePath Path to the original OAuth credential file (optional)
      */
     private async reloadCredentials(
@@ -70,69 +71,70 @@ export class GeminiApiClient {
             this.authClient.setCredentials(credentials);
             this.logger.info("Credentials reloaded from disk after rotation");
 
-            // Trigger token refresh if access token is expired or missing
-            // This ensures we have a valid access token after rotation
+            // IMPORTANT: Reset cached projectId to prevent 403 errors
+            // Each OAuth account may have a different associated project
+            this.projectId = null;
+            this.logger.info("Project ID cache cleared for new OAuth account");
+
+            // Always trigger token refresh after rotation
+            // This ensures the new OAuth credentials have a valid access token
+            this.logger.info(
+                "Triggering token refresh after OAuth rotation..."
+            );
             try {
-                const { token } = await this.authClient.getAccessToken();
-                if (token) {
-                    this.logger.info("Access token validated after rotation");
-                } else {
-                    // Token is missing or expired, force refresh
-                    this.logger.info(
-                        "Access token missing, triggering refresh..."
-                    );
-                    const refreshed =
-                        await this.authClient.refreshAccessToken();
-                    this.logger.info("Access token refreshed successfully");
+                // Force refresh by clearing access token first
+                this.authClient.credentials.access_token = undefined;
 
-                    // Update credentials with refreshed tokens
-                    this.authClient.setCredentials(refreshed.credentials);
+                const refreshed = await this.authClient.refreshAccessToken();
+                this.logger.info("Access token refreshed successfully");
 
-                    // Write refreshed credentials to cache
-                    await fs.writeFile(
-                        credentialPath,
-                        JSON.stringify(refreshed.credentials, null, 2),
-                        { mode: 0o600 }
-                    );
-                    this.logger.info(
-                        "Refreshed credentials cached to: " + credentialPath
-                    );
+                // Update credentials with refreshed tokens
+                this.authClient.setCredentials(refreshed.credentials);
 
-                    // Also write back to source file if provided
-                    if (sourceFilePath) {
-                        try {
-                            // Merge with existing credential file to preserve other fields
-                            const existingContent = await fs.readFile(
+                // Write refreshed credentials to cache
+                await fs.writeFile(
+                    credentialPath,
+                    JSON.stringify(refreshed.credentials, null, 2),
+                    { mode: 0o600 }
+                );
+                this.logger.info(
+                    "Refreshed credentials cached to: " + credentialPath
+                );
+
+                // Also write back to source file if provided
+                if (sourceFilePath) {
+                    try {
+                        // Merge with existing credential file to preserve other fields
+                        const existingContent = await fs.readFile(
+                            sourceFilePath,
+                            "utf-8"
+                        );
+                        const existingCreds = JSON.parse(existingContent);
+                        const updatedCreds = {
+                            ...existingCreds,
+                            ...refreshed.credentials,
+                        };
+                        await fs.writeFile(
+                            sourceFilePath,
+                            JSON.stringify(updatedCreds, null, 2),
+                            { mode: 0o600 }
+                        );
+                        this.logger.info(
+                            "Refreshed credentials written back to source: " +
+                                sourceFilePath
+                        );
+                    } catch (sourceError) {
+                        this.logger.warn(
+                            "Failed to write refreshed credentials to source file: " +
                                 sourceFilePath,
-                                "utf-8"
-                            );
-                            const existingCreds = JSON.parse(existingContent);
-                            const updatedCreds = {
-                                ...existingCreds,
-                                ...refreshed.credentials,
-                            };
-                            await fs.writeFile(
-                                sourceFilePath,
-                                JSON.stringify(updatedCreds, null, 2),
-                                { mode: 0o600 }
-                            );
-                            this.logger.info(
-                                "Refreshed credentials written back to source: " +
-                                    sourceFilePath
-                            );
-                        } catch (sourceError) {
-                            this.logger.warn(
-                                "Failed to write refreshed credentials to source file: " +
-                                    sourceFilePath,
-                                sourceError
-                            );
-                            // Continue anyway - cache is updated
-                        }
+                            sourceError
+                        );
+                        // Continue anyway - cache is updated
                     }
                 }
             } catch (refreshError) {
                 this.logger.warn(
-                    "Failed to validate/refresh access token after rotation",
+                    "Failed to refresh access token after rotation",
                     refreshError
                 );
                 // Continue anyway - the API call will handle 401 and retry
@@ -145,8 +147,10 @@ export class GeminiApiClient {
 
     /**
      * Discovers the Google Cloud project ID.
+     * Returns null if project ID is not required or cannot be discovered.
+     * This is optional - many OAuth setups don't require a project ID.
      */
-    public async discoverProjectId(): Promise<string> {
+    public async discoverProjectId(): Promise<string | null> {
         if (this.googleCloudProject) {
             return this.googleCloudProject;
         }
@@ -192,16 +196,22 @@ export class GeminiApiClient {
             }
 
             if (!lroResponse?.done) {
-                throw new Error("common:errors.geminiCli.onboardingTimeout");
+                this.logger.warn(
+                    "Project discovery timed out, continuing without project ID"
+                );
+                return null;
             }
 
             this.projectId =
-                lroResponse.response?.cloudaicompanionProject?.id ??
-                initialProjectId;
+                lroResponse.response?.cloudaicompanionProject?.id ?? null;
             return this.projectId;
         } catch (error: unknown) {
-            this.logger.error("Failed to discover project ID", error);
-            throw new Error("Could not discover project ID.");
+            // Project ID discovery is optional - log warning but don't throw
+            this.logger.warn(
+                "Failed to discover project ID (this is optional)",
+                error
+            );
+            return null;
         }
     }
 

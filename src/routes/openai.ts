@@ -57,7 +57,10 @@ export function createOpenAIRouter(
             );
 
             const geminiCompletionRequest =
-                mapOpenAIChatCompletionRequestToGemini(projectId, body);
+                mapOpenAIChatCompletionRequestToGemini(
+                    projectId ?? undefined,
+                    body
+                );
 
             if (body.stream) {
                 res.setHeader("Content-Type", "text/event-stream");

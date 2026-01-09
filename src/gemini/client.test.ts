@@ -109,7 +109,7 @@ describe("GeminiApiClient", () => {
             vi.unstubAllGlobals();
         });
 
-        it("should handle API errors during discovery", async () => {
+        it("should return null on API errors during discovery (project ID is optional)", async () => {
             const client = new GeminiApiClient(
                 mockAuthClient,
                 undefined,
@@ -122,9 +122,9 @@ describe("GeminiApiClient", () => {
                 text: async () => "Internal Server Error",
             } as Response);
 
-            await expect(client.discoverProjectId()).rejects.toThrow(
-                "Could not discover project ID."
-            );
+            // Project ID discovery is now optional - returns null on failure instead of throwing
+            const result = await client.discoverProjectId();
+            expect(result).toBeNull();
         });
     });
 
