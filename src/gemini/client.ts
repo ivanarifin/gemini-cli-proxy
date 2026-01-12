@@ -259,6 +259,22 @@ export class GeminiApiClient {
                         // Reload credentials from disk after rotation
                         await this.reloadCredentials(rotatedPath);
 
+                        // Re-discover project ID for the new OAuth account
+                        const newProjectId = await this.discoverProjectId();
+                        this.logger.info(
+                            `Project ID re-discovered after rotation: ${
+                                newProjectId ?? "none"
+                            }`
+                        );
+
+                        // Update the request body with new project ID if discovery succeeded
+                        if (newProjectId && body.cloudaicompanionProject) {
+                            body.cloudaicompanionProject = newProjectId;
+                            this.logger.info(
+                                `Updated request with new project ID: ${newProjectId}`
+                            );
+                        }
+
                         // Retry request once with new credentials
                         try {
                             return await this.callEndpoint(method, body, true);
@@ -513,6 +529,22 @@ export class GeminiApiClient {
 
                         // Reload credentials from disk after rotation
                         await this.reloadCredentials(rotatedPath);
+
+                        // Re-discover project ID for the new OAuth account
+                        const newProjectId = await this.discoverProjectId();
+                        this.logger.info(
+                            `Project ID re-discovered after rotation: ${
+                                newProjectId ?? "none"
+                            }`
+                        );
+
+                        // Update the request with new project ID
+                        if (newProjectId) {
+                            geminiCompletionRequest.project = newProjectId;
+                            this.logger.info(
+                                `Updated stream request with new project ID: ${newProjectId}`
+                            );
+                        }
 
                         // Retry stream with new credentials
                         try {
