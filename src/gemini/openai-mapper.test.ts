@@ -49,6 +49,26 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
         expect(result.request.generationConfig?.temperature).toBe(0.7);
     });
 
+    it("should map request with max_tokens", () => {
+        const request: OpenAI.ChatCompletionRequest = {
+            model: "gemini-2.5-flash",
+            max_tokens: 100,
+            messages: [
+                {
+                    role: "user",
+                    content: "Test message",
+                },
+            ],
+        };
+
+        const result = mapOpenAIChatCompletionRequestToGemini(
+            "test-project",
+            request
+        );
+
+        expect(result.request.generationConfig?.maxOutputTokens).toBe(100);
+    });
+
     it("should map request with system message", () => {
         const request: OpenAI.ChatCompletionRequest = {
             model: "gemini-2.5-pro",

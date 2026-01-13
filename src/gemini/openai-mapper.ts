@@ -16,6 +16,7 @@ export const mapOpenAIChatCompletionRequestToGemini = (
         contents: mapOpenAIMessagesToGeminiFormat(messagesWithoutSystem),
         generationConfig: {
             temperature: request.temperature ?? DEFAULT_TEMPERATURE,
+            ...(request.max_tokens && { maxOutputTokens: request.max_tokens }),
         },
     };
 

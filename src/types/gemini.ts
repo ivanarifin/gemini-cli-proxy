@@ -15,6 +15,7 @@ export type ChatCompletionRequestBody = {
     toolConfig?: ToolConfig;
     generationConfig?: {
         temperature?: number;
+        maxOutputTokens?: number;
         thinkingConfig?: ThinkingConfig;
     };
 };
