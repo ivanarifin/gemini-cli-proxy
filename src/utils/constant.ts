@@ -7,7 +7,7 @@ export const DISABLE_BROWSER_AUTH = false;
 export const DISABLE_AUTO_MODEL_SWITCH = false;
 export const DEFAULT_TEMPERATURE = 1;
 
-export const REQUEST_TIMEOUT_MS = 60000; // 60 seconds
+export const REQUEST_TIMEOUT_MS = 600000; // 10 minutes
 
 // OAuth Rotation Configuration
 export const OAUTH_ROTATION_PATHS: string[] = [];
