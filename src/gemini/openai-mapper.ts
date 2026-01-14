@@ -155,8 +155,27 @@ const mapOpenAIMessageToGeminiFormat = (
         msg.tool_calls.length > 0
     ) {
         const parts: Gemini.Part[] = [];
-        if (typeof msg.content === "string" && msg.content.trim()) {
-            parts.push({ text: msg.content });
+
+        let reasoningContent = msg.reasoning_content;
+        let content = typeof msg.content === "string" ? msg.content : "";
+
+        // Try to extract thinking from content if not explicitly provided
+        if (!reasoningContent && content.includes("<thinking>")) {
+            const match = content.match(/<thinking>([\s\S]*?)<\/thinking>/);
+            if (match) {
+                reasoningContent = match[1].trim();
+                content = content
+                    .replace(/<thinking>[\s\S]*?<\/thinking>\n*/, "")
+                    .trim();
+            }
+        }
+
+        if (reasoningContent) {
+            parts.push({ text: reasoningContent, thought: true });
+        }
+
+        if (content && content.trim()) {
+            parts.push({ text: content });
         }
 
         for (const toolCall of msg.tool_calls) {
@@ -174,9 +193,32 @@ const mapOpenAIMessageToGeminiFormat = (
     }
 
     if (typeof msg.content === "string") {
+        const parts: Gemini.Part[] = [];
+        let reasoningContent = msg.reasoning_content;
+        let content = msg.content;
+
+        if (msg.role === "assistant") {
+            // Try to extract thinking from content if not explicitly provided
+            if (!reasoningContent && content.includes("<thinking>")) {
+                const match = content.match(/<thinking>([\s\S]*?)<\/thinking>/);
+                if (match) {
+                    reasoningContent = match[1].trim();
+                    content = content
+                        .replace(/<thinking>[\s\S]*?<\/thinking>\n*/, "")
+                        .trim();
+                }
+            }
+
+            if (reasoningContent) {
+                parts.push({ text: reasoningContent, thought: true });
+            }
+        }
+
+        parts.push({ text: content });
+
         return {
             role,
-            parts: [{ text: msg.content }],
+            parts,
         };
     }
 
@@ -256,10 +298,11 @@ const thinkingBudgetMap: Record<OpenAI.ReasoningEffort, number> = {
 const convertOpenAIFunctionToGemini = (
     fn: OpenAI.FunctionDeclaration
 ): Gemini.FunctionDeclaration => {
-    const { parameters, ...rest } = fn;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { parameters, strict, ...rest } = fn as any;
 
     if (!parameters) {
-        return fn;
+        return rest;
     }
 
     // Convert OpenAI JSON Schema to Gemini function parameters format

@@ -52,6 +52,7 @@ export type ChatMessage = {
     content: string | MessageContent[];
     tool_calls?: ToolCall[];
     tool_call_id?: string;
+    reasoning_content?: string;
 };
 
 export type MessageContent = {
