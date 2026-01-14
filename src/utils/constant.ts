@@ -7,11 +7,13 @@ export const DISABLE_BROWSER_AUTH = false;
 export const DISABLE_AUTO_MODEL_SWITCH = false;
 export const DEFAULT_TEMPERATURE = 1;
 
+export const REQUEST_TIMEOUT_MS = 60000; // 60 seconds
+
 // OAuth Rotation Configuration
 export const OAUTH_ROTATION_PATHS: string[] = [];
 
 // Rate Limit Detection
-export const RATE_LIMIT_STATUS_CODES = [429, 503] as const;
+export const RATE_LIMIT_STATUS_CODES = [408, 429, 503, 504] as const;
 
 // Model Fallback Mapping
 export const AUTO_SWITCH_MODEL_MAP = {

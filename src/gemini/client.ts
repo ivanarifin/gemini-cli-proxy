@@ -5,6 +5,7 @@ import {
     CODE_ASSIST_API_VERSION,
     CODE_ASSIST_ENDPOINT,
     OPENAI_CHAT_COMPLETION_OBJECT,
+    REQUEST_TIMEOUT_MS,
 } from "../utils/constant.js";
 import {
     AutoModelSwitchingHelper,
@@ -240,24 +241,39 @@ export class GeminiApiClient {
         retryCount: number = 0
     ): Promise<unknown> {
         const { token } = await this.authClient.getAccessToken();
-        const response = await fetch(
-            `${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_API_VERSION}:${method}`,
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify(body),
+        let response: Response;
+        try {
+            response = await fetch(
+                `${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_API_VERSION}:${method}`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify(body),
+                    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+                }
+            );
+        } catch (error: any) {
+            if (error.name === "TimeoutError" || error.name === "AbortError") {
+                throw new GeminiApiError("Request timed out", 408);
             }
-        );
+            throw error;
+        }
 
         if (!response.ok) {
-            const errorText = await response.text();
+            const errorText =
+                response.status === 408
+                    ? "Request Timeout"
+                    : await response.text();
 
             // Handle 429 rate limit and 403 forbidden errors with OAuth rotation
             if (
-                (response.status === 429 || response.status === 403) &&
+                (response.status === 429 ||
+                    response.status === 403 ||
+                    response.status === 408 ||
+                    response.status === 504) &&
                 retryCount < OAuthRotator.getInstance().getAccountCount() &&
                 OAuthRotator.getInstance().isRotationEnabled()
             ) {
@@ -338,7 +354,9 @@ export class GeminiApiClient {
             }
 
             throw new GeminiApiError(
-                `API call failed with status ${response.status}: ${errorText}`,
+                response.status === 408
+                    ? "Request timed out"
+                    : `API call failed with status ${response.status}: ${errorText}`,
                 response.status,
                 errorText
             );
@@ -508,20 +526,32 @@ export class GeminiApiClient {
         retryCount: number = 0
     ): AsyncGenerator<OpenAI.StreamChunk> {
         const { token } = await this.authClient.getAccessToken();
-        const response = await fetch(
-            `${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_API_VERSION}:streamGenerateContent?alt=sse`,
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify(geminiCompletionRequest),
+        let response: Response;
+        try {
+            response = await fetch(
+                `${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_API_VERSION}:streamGenerateContent?alt=sse`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify(geminiCompletionRequest),
+                    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+                }
+            );
+        } catch (error: any) {
+            if (error.name === "TimeoutError" || error.name === "AbortError") {
+                throw new GeminiApiError("Stream request timed out", 408);
             }
-        );
+            throw error;
+        }
 
         if (!response.ok) {
-            const errorText = await response.text();
+            const errorText =
+                response.status === 408
+                    ? "Request Timeout"
+                    : await response.text();
 
             // Handle 401 errors with token refresh
             if (response.status === 401 && retryCount === 0) {
@@ -538,7 +568,10 @@ export class GeminiApiClient {
 
             // Handle 429 rate limit and 403 forbidden errors with OAuth rotation
             if (
-                (response.status === 429 || response.status === 403) &&
+                (response.status === 429 ||
+                    response.status === 403 ||
+                    response.status === 408 ||
+                    response.status === 504) &&
                 retryCount < OAuthRotator.getInstance().getAccountCount() &&
                 OAuthRotator.getInstance().isRotationEnabled()
             ) {
@@ -617,7 +650,9 @@ export class GeminiApiClient {
             }
 
             throw new GeminiApiError(
-                `Stream request failed: ${response.status} ${errorText}`,
+                response.status === 408
+                    ? "Stream request timed out"
+                    : `Stream request failed: ${response.status} ${errorText}`,
                 response.status,
                 errorText
             );

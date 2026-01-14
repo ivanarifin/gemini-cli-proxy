@@ -22,6 +22,7 @@ import {
     clearCachedGoogleAccount,
 } from "../utils/user_account.js";
 import { getCachedCredentialPath } from "../utils/paths.js";
+import { REQUEST_TIMEOUT_MS } from "../utils/constant.js";
 import readline from "node:readline";
 import { Logger, getLogger } from "../utils/logger.js";
 import chalk from "chalk";
@@ -416,6 +417,7 @@ async function fetchAndCacheUserInfo(
                 headers: {
                     Authorization: `Bearer ${token}`,
                 },
+                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
             }
         );
 
