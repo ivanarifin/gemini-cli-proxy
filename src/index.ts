@@ -23,9 +23,9 @@ const program = new Command()
         process.env.GOOGLE_CLOUD_PROJECT
     )
     .option(
-        "--enable-browser-auth",
-        "Enables browser auth flow",
-        !DISABLE_BROWSER_AUTH
+        "--disable-browser-auth",
+        "Disables browser auth flow and uses code based auth",
+        DISABLE_BROWSER_AUTH
     )
     .option(
         "--enable-google-search",
@@ -97,7 +97,9 @@ export async function startServer() {
             );
         }
 
-        const authClient = await setupAuthentication(!opts.enableBrowserAuth);
+        const authClient = await setupAuthentication(
+            opts.disableBrowserAuth ?? false
+        );
         const geminiClient = new GeminiApiClient(
             authClient,
             opts.googleCloudProject ?? process.env.GOOGLE_CLOUD_PROJECT,

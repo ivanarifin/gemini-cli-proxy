@@ -31,7 +31,7 @@ Options:
 
 - `-p, --port <port>` - Server port (default: 3000)
 - `-g, --google-cloud-project <project>` - Google Cloud project ID if you have paid/enterprise tier (default: GOOGLE_CLOUD_PROJECT env variable)
-- `--enable-browser-auth` - Enables browser auth flow (default: false)
+- `--disable-browser-auth` - Disables browser auth flow and uses code based auth (default: false)
 - `--enable-google-search` - Enables native Google Search tool (default: false)
 - `--disable-auto-model-switch` - Disables auto model switching in case of rate limiting (default: false)
 - `--oauth-rotation-paths <paths>` - Comma-separated paths to OAuth credential files for automatic rotation on rate limits (default: disabled)
