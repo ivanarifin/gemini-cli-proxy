@@ -84,12 +84,6 @@ describe("GeminiApiClient", () => {
         });
 
         it("should cache and return discovered project ID", async () => {
-            const client = new GeminiApiClient(
-                mockAuthClient,
-                undefined,
-                false
-            );
-
             // Mock successful project discovery - return cloudaicompanionProject directly
             // This avoids the onboardUser polling loop
             mockAuthClient.getAccessToken.mockResolvedValue({
@@ -104,6 +98,12 @@ describe("GeminiApiClient", () => {
                 }),
             } as Response);
             vi.stubGlobal("fetch", mockFetch);
+
+            const client = new GeminiApiClient(
+                mockAuthClient,
+                undefined,
+                false
+            );
 
             const projectId = await client.discoverProjectId();
 

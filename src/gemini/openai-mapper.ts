@@ -35,7 +35,7 @@ export const mapOpenAIChatCompletionRequestToGemini = (
     }
 
     if (enableGoogleSearch) {
-        tools.push({ googleSearchRetrieval: {} });
+        tools.push({ googleSearch: {} });
     }
 
     if (tools.length > 0) {

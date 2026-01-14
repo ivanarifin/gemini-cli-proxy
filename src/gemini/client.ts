@@ -36,6 +36,7 @@ export class GeminiApiError extends Error {
  */
 export class GeminiApiClient {
     private projectId: string | null = null;
+    private projectIdPromise: Promise<string | null> | null = null;
     private firstChunk: boolean = true;
     private readonly creationTime: number;
     private readonly chatID: string;
@@ -52,6 +53,9 @@ export class GeminiApiClient {
         this.creationTime = Math.floor(Date.now() / 1000);
         this.autoSwitcher = AutoModelSwitchingHelper.getInstance();
         this.logger = getLogger("GEMINI-CLIENT", chalk.blue);
+
+        // Eagerly start project discovery to reduce latency on the first request
+        void this.discoverProjectId();
     }
 
     /**
@@ -159,61 +163,75 @@ export class GeminiApiClient {
             return this.projectId;
         }
 
-        try {
-            const initialProjectId = "default-project";
-            const loadResponse = (await this.callEndpoint("loadCodeAssist", {
-                cloudaicompanionProject: initialProjectId,
-                metadata: { duetProject: initialProjectId },
-            })) as Gemini.ProjectDiscoveryResponse;
+        if (this.projectIdPromise) {
+            return this.projectIdPromise;
+        }
 
-            if (loadResponse.cloudaicompanionProject) {
-                this.projectId = loadResponse.cloudaicompanionProject;
-                return loadResponse.cloudaicompanionProject;
-            }
+        this.projectIdPromise = (async () => {
+            try {
+                const initialProjectId = "default-project";
+                const loadResponse = (await this.callEndpoint(
+                    "loadCodeAssist",
+                    {
+                        cloudaicompanionProject: initialProjectId,
+                        metadata: { duetProject: initialProjectId },
+                    }
+                )) as Gemini.ProjectDiscoveryResponse;
 
-            const defaultTier = loadResponse.allowedTiers?.find(
-                (tier) => tier.isDefault
-            );
-            const tierId = defaultTier?.id ?? "free-tier";
-            const onboardRequest = {
-                tierId,
-                cloudaicompanionProject: initialProjectId,
-            };
-
-            // Poll until operation is complete with timeout protection
-            const MAX_RETRIES = 30;
-            let retryCount = 0;
-            let lroResponse: Gemini.OnboardUserResponse | undefined;
-            while (retryCount < MAX_RETRIES) {
-                lroResponse = (await this.callEndpoint(
-                    "onboardUser",
-                    onboardRequest
-                )) as Gemini.OnboardUserResponse;
-                if (lroResponse.done) {
-                    break;
+                if (loadResponse.cloudaicompanionProject) {
+                    this.projectId = loadResponse.cloudaicompanionProject;
+                    return this.projectId;
                 }
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-                retryCount++;
-            }
 
-            if (!lroResponse?.done) {
+                const defaultTier = loadResponse.allowedTiers?.find(
+                    (tier) => tier.isDefault
+                );
+                const tierId = defaultTier?.id ?? "free-tier";
+                const onboardRequest = {
+                    tierId,
+                    cloudaicompanionProject: initialProjectId,
+                };
+
+                // Poll until operation is complete with timeout protection
+                const MAX_RETRIES = 30;
+                let retryCount = 0;
+                let lroResponse: Gemini.OnboardUserResponse | undefined;
+                while (retryCount < MAX_RETRIES) {
+                    lroResponse = (await this.callEndpoint(
+                        "onboardUser",
+                        onboardRequest
+                    )) as Gemini.OnboardUserResponse;
+                    if (lroResponse.done) {
+                        break;
+                    }
+                    // Reduced polling interval for faster discovery
+                    await new Promise((resolve) => setTimeout(resolve, 500));
+                    retryCount++;
+                }
+
+                if (!lroResponse?.done) {
+                    this.logger.warn(
+                        "Project discovery timed out, continuing without project ID"
+                    );
+                    return null;
+                }
+
+                this.projectId =
+                    lroResponse.response?.cloudaicompanionProject?.id ?? null;
+                return this.projectId;
+            } catch (error: unknown) {
+                // Project ID discovery is optional - log warning but don't throw
                 this.logger.warn(
-                    "Project discovery timed out, continuing without project ID"
+                    "Failed to discover project ID (this is optional)",
+                    error
                 );
                 return null;
+            } finally {
+                this.projectIdPromise = null;
             }
+        })();
 
-            this.projectId =
-                lroResponse.response?.cloudaicompanionProject?.id ?? null;
-            return this.projectId;
-        } catch (error: unknown) {
-            // Project ID discovery is optional - log warning but don't throw
-            this.logger.warn(
-                "Failed to discover project ID (this is optional)",
-                error
-            );
-            return null;
-        }
+        return this.projectIdPromise;
     }
 
     private async callEndpoint(
