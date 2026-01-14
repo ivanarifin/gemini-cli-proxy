@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import express from "express";
 import { Command } from "@commander-js/extra-typings";
+import compression from "compression";
 
 import { setupAuthentication } from "./auth/auth.js";
 import { GeminiApiClient } from "./gemini/client.js";
@@ -108,6 +109,22 @@ export async function startServer() {
 
         const app = express();
 
+        // Add compression middleware to reduce response size and improve latency
+        app.use(compression());
+
+        // Add request timeout middleware (5 minutes)
+        app.use((req, res, next) => {
+            res.setTimeout(300000, () => {
+                if (!res.headersSent) {
+                    res.status(504).json({
+                        error: "Request timeout",
+                        message: "The request took too long to process",
+                    });
+                }
+            });
+            next();
+        });
+
         // Add request logging middleware
         app.use((req, res, next) => {
             logger.info(
@@ -116,11 +133,23 @@ export async function startServer() {
             next();
         });
 
-        // Custom JSON parsing with better error handling
+        // Custom JSON parsing with better error handling and size limit
         app.use((req, res, next) => {
             if (req.headers["content-type"]?.includes("application/json")) {
                 let body = "";
+                let bodySize = 0;
+                const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10MB limit
+
                 req.on("data", (chunk) => {
+                    bodySize += chunk.length;
+                    if (bodySize > MAX_BODY_SIZE) {
+                        res.status(413).json({
+                            error: "Request body too large",
+                            maxSize: MAX_BODY_SIZE,
+                        });
+                        req.destroy();
+                        return;
+                    }
                     body += chunk.toString();
                 });
                 req.on("end", () => {
