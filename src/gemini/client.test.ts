@@ -14,21 +14,6 @@ vi.mock("../utils/oauth-rotator.js", () => ({
     },
 }));
 
-vi.mock("node:fs", () => ({
-    promises: {
-        readFile: vi.fn(),
-        writeFile: vi.fn(),
-        mkdir: vi.fn(),
-        rm: vi.fn(),
-    },
-}));
-
-vi.mock("../utils/paths.js", () => ({
-    getCachedCredentialPath: vi.fn().mockReturnValue("/mock/creds.json"),
-    getGoogleAccountsCachePath: vi.fn().mockReturnValue("/mock/accounts.json"),
-    getProjectCachePath: vi.fn().mockReturnValue("/mock/project_cache.json"),
-}));
-
 describe("GeminiApiClient", () => {
     let mockAuthClient: any;
     let mockOAuthRotator: any;
@@ -114,12 +99,6 @@ describe("GeminiApiClient", () => {
             } as Response);
             vi.stubGlobal("fetch", mockFetch);
 
-            // Mock fs.readFile to fail (no cache)
-            const { promises: fs } = await import("node:fs");
-            vi.mocked(fs.readFile).mockRejectedValue(
-                new Error("File not found")
-            );
-
             const client = new GeminiApiClient(
                 mockAuthClient,
                 undefined,
@@ -135,25 +114,21 @@ describe("GeminiApiClient", () => {
         });
 
         it("should return null on API errors during discovery (project ID is optional)", async () => {
-            // Mock fetch BEFORE creating the client because discoverProjectId is called in constructor
-            const mockFetch = vi.fn().mockResolvedValue({
-                ok: false,
-                status: 500,
-                text: async () => "Internal Server Error",
-            } as Response);
-            vi.stubGlobal("fetch", mockFetch);
-
             const client = new GeminiApiClient(
                 mockAuthClient,
                 undefined,
                 false
             );
 
+            global.fetch = vi.fn().mockResolvedValue({
+                ok: false,
+                status: 500,
+                text: async () => "Internal Server Error",
+            } as Response);
+
             // Project ID discovery is now optional - returns null on failure instead of throwing
             const result = await client.discoverProjectId();
             expect(result).toBeNull();
-
-            vi.unstubAllGlobals();
         });
     });
 

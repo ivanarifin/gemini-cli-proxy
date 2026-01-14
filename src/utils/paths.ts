@@ -10,7 +10,6 @@ import * as os from "node:os";
 export const GEMINI_DIR = ".gemini";
 export const CREDENTIAL_FILENAME = "oauth_creds.json";
 export const GOOGLE_ACCOUNTS_FILENAME = "accounts.json";
-export const PROJECT_CACHE_FILENAME = "project_cache.json";
 
 /**
  * Get the path to the cached credentials file
@@ -26,12 +25,4 @@ export function getCachedCredentialPath(): string {
  */
 export function getGoogleAccountsCachePath(): string {
     return path.join(os.homedir(), GEMINI_DIR, GOOGLE_ACCOUNTS_FILENAME);
-}
-
-/**
- * Get the path to the project cache file
- * @returns The absolute path to the project cache file
- */
-export function getProjectCachePath(): string {
-    return path.join(os.homedir(), GEMINI_DIR, PROJECT_CACHE_FILENAME);
 }
