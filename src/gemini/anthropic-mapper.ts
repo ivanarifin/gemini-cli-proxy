@@ -5,7 +5,8 @@ import { mapModelToGemini, mapJsonSchemaToGemini } from "./mapper.js";
 
 export const mapAnthropicMessagesRequestToGemini = (
     project: string | undefined,
-    request: Anthropic.MessagesRequest
+    request: Anthropic.MessagesRequest,
+    enableGoogleSearch: boolean = false
 ): Gemini.ChatCompletionRequest => {
     const model = mapModelToGemini(request.model);
 
@@ -28,12 +29,22 @@ export const mapAnthropicMessagesRequestToGemini = (
     }
 
     // Handle tools
+    const tools: Gemini.ChatCompletionRequestBody["tools"] = [];
+
     if (request.tools) {
-        geminiRequest.tools = {
+        tools.push({
             functionDeclarations: request.tools.map(
                 convertAnthropicToolToGemini
             ),
-        };
+        });
+    }
+
+    if (enableGoogleSearch) {
+        tools.push({ googleSearchRetrieval: {} });
+    }
+
+    if (tools.length > 0) {
+        geminiRequest.tools = tools;
     }
 
     // Handle tool choice

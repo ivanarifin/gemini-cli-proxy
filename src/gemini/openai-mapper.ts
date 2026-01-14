@@ -5,7 +5,8 @@ import { mapModelToGemini, mapJsonSchemaToGemini } from "./mapper.js";
 
 export const mapOpenAIChatCompletionRequestToGemini = (
     project: string | undefined,
-    request: OpenAI.ChatCompletionRequest
+    request: OpenAI.ChatCompletionRequest,
+    enableGoogleSearch: boolean = false
 ): Gemini.ChatCompletionRequest => {
     const model = mapModelToGemini(request.model);
     const messages = request.messages ?? [];
@@ -23,12 +24,22 @@ export const mapOpenAIChatCompletionRequestToGemini = (
     if (messages.length > 0) {
         geminiRequest.systemInstruction = mapSystemInstruction(messages);
     }
+    const tools: Gemini.ChatCompletionRequestBody["tools"] = [];
+
     if (request.tools) {
-        geminiRequest.tools = {
+        tools.push({
             functionDeclarations: request.tools?.map((tool) =>
                 convertOpenAIFunctionToGemini(tool.function)
             ),
-        };
+        });
+    }
+
+    if (enableGoogleSearch) {
+        tools.push({ googleSearchRetrieval: {} });
+    }
+
+    if (tools.length > 0) {
+        geminiRequest.tools = tools;
     }
     if (request.tool_choice) {
         geminiRequest.toolConfig = mapToolChoiceToToolConfig(

@@ -118,10 +118,10 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
         );
 
         expect(result.request.tools).toBeDefined();
-        expect(result.request.tools?.functionDeclarations).toHaveLength(1);
+        expect(result.request.tools?.[0]?.functionDeclarations).toHaveLength(1);
 
         const functionDeclaration =
-            result.request.tools?.functionDeclarations?.[0];
+            result.request.tools?.[0]?.functionDeclarations?.[0];
         expect(functionDeclaration?.name).toBe("get_weather");
         expect(functionDeclaration?.description).toBe(
             "Get weather information"

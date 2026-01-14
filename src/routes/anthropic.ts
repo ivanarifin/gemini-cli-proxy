@@ -10,7 +10,8 @@ import { getLogger } from "../utils/logger.js";
 import chalk from "chalk";
 
 export function createAnthropicRouter(
-    geminiClient: GeminiApiClient
+    geminiClient: GeminiApiClient,
+    enableGoogleSearch: boolean = false
 ): express.Router {
     const router = express.Router();
     const logger = getLogger("SERVER-ANTHROPIC", chalk.green);
@@ -60,7 +61,8 @@ export function createAnthropicRouter(
             const projectId = await geminiClient.discoverProjectId();
             const geminiRequest = mapAnthropicMessagesRequestToGemini(
                 projectId ?? undefined,
-                body
+                body,
+                enableGoogleSearch
             );
             const requestId = `msg_${crypto.randomUUID()}`;
 

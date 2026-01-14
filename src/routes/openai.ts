@@ -7,7 +7,8 @@ import { getLogger } from "../utils/logger.js";
 import chalk from "chalk";
 
 export function createOpenAIRouter(
-    geminiClient: GeminiApiClient
+    geminiClient: GeminiApiClient,
+    enableGoogleSearch: boolean = false
 ): express.Router {
     const router = express.Router();
     const logger = getLogger("SERVER-OPENAI", chalk.green);
@@ -59,7 +60,8 @@ export function createOpenAIRouter(
             const geminiCompletionRequest =
                 mapOpenAIChatCompletionRequestToGemini(
                     projectId ?? undefined,
-                    body
+                    body,
+                    enableGoogleSearch
                 );
 
             if (body.stream) {

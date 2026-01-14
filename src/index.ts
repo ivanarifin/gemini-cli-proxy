@@ -23,14 +23,14 @@ const program = new Command()
         process.env.GOOGLE_CLOUD_PROJECT
     )
     .option(
-        "--disable-browser-auth",
-        "Disables browser auth flow and uses code based auth",
-        DISABLE_BROWSER_AUTH
+        "--enable-browser-auth",
+        "Enables browser auth flow",
+        !DISABLE_BROWSER_AUTH
     )
     .option(
-        "--disable-google-search",
-        "Disables native Google Search tool",
-        DISABLE_GOOGLE_SEARCH
+        "--enable-google-search",
+        "Enables native Google Search tool",
+        !DISABLE_GOOGLE_SEARCH
     )
     .option(
         "--disable-auto-model-switch",
@@ -97,9 +97,7 @@ export async function startServer() {
             );
         }
 
-        const authClient = await setupAuthentication(
-            opts.disableBrowserAuth ?? false
-        );
+        const authClient = await setupAuthentication(!opts.enableBrowserAuth);
         const geminiClient = new GeminiApiClient(
             authClient,
             opts.googleCloudProject ?? process.env.GOOGLE_CLOUD_PROJECT,
@@ -161,10 +159,16 @@ export async function startServer() {
         app.get("/health", (_req, res) => {
             res.status(200).json({ status: "ok" });
         });
-        const openAIRouter = createOpenAIRouter(geminiClient);
+        const openAIRouter = createOpenAIRouter(
+            geminiClient,
+            opts.enableGoogleSearch
+        );
         app.use("/openai", openAIRouter);
 
-        const anthropicRouter = createAnthropicRouter(geminiClient);
+        const anthropicRouter = createAnthropicRouter(
+            geminiClient,
+            opts.enableGoogleSearch
+        );
         app.use("/anthropic", anthropicRouter);
 
         // 6. Start server
