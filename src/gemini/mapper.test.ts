@@ -695,4 +695,161 @@ describe("mapJsonSchemaToGemini", () => {
             });
         });
     });
+
+    describe("unsupported JSON Schema keywords", () => {
+        it("should remove exclusiveMinimum keyword", () => {
+            const schema: JsonSchema = {
+                type: "object",
+                properties: {
+                    count: {
+                        type: "number",
+                        minimum: 0,
+                        exclusiveMinimum: true,
+                    },
+                },
+            };
+
+            const result = mapJsonSchemaToGemini(schema);
+
+            expect(result).toEqual({
+                type: "object",
+                properties: {
+                    count: {
+                        type: "number",
+                        minimum: 0,
+                    },
+                },
+            });
+            expect(result.properties?.count).not.toHaveProperty(
+                "exclusiveMinimum",
+            );
+        });
+
+        it("should remove exclusiveMaximum keyword", () => {
+            const schema: JsonSchema = {
+                type: "object",
+                properties: {
+                    value: {
+                        type: "number",
+                        maximum: 100,
+                        exclusiveMaximum: true,
+                    },
+                },
+            };
+
+            const result = mapJsonSchemaToGemini(schema);
+
+            expect(result).toEqual({
+                type: "object",
+                properties: {
+                    value: {
+                        type: "number",
+                        maximum: 100,
+                    },
+                },
+            });
+            expect(result.properties?.value).not.toHaveProperty(
+                "exclusiveMaximum",
+            );
+        });
+
+        it("should remove multiple unsupported keywords", () => {
+            const schema: JsonSchema = {
+                type: "object",
+                properties: {
+                    name: {
+                        type: "string",
+                        patternProperties: {
+                            "^x-": { type: "string" },
+                        },
+                    },
+                    age: {
+                        type: "number",
+                        exclusiveMinimum: 0,
+                        exclusiveMaximum: 150,
+                    },
+                },
+                dependentSchemas: {
+                    email: {
+                        properties: {
+                            verified: { type: "boolean" },
+                        },
+                    },
+                },
+            };
+
+            const result = mapJsonSchemaToGemini(schema);
+
+            expect(result).toEqual({
+                type: "object",
+                properties: {
+                    name: {
+                        type: "string",
+                    },
+                    age: {
+                        type: "number",
+                    },
+                },
+            });
+            expect(result).not.toHaveProperty("dependentSchemas");
+            expect(result.properties?.name).not.toHaveProperty(
+                "patternProperties",
+            );
+            expect(result.properties?.age).not.toHaveProperty(
+                "exclusiveMinimum",
+            );
+            expect(result.properties?.age).not.toHaveProperty(
+                "exclusiveMaximum",
+            );
+        });
+
+        it("should remove all unsupported keywords", () => {
+            const schema: JsonSchema = {
+                type: "object",
+                properties: {
+                    field: {
+                        type: "string",
+                        contentEncoding: "base64",
+                        contentMediaType: "text/plain",
+                    },
+                },
+                propertyNames: {
+                    type: "string",
+                    pattern: "^[a-z]+$",
+                },
+                if: {
+                    properties: {
+                        type: { const: "admin" },
+                    },
+                },
+                then: {
+                    required: ["permissions"],
+                },
+                else: {
+                    required: ["role"],
+                },
+            };
+
+            const result = mapJsonSchemaToGemini(schema);
+
+            expect(result).toEqual({
+                type: "object",
+                properties: {
+                    field: {
+                        type: "string",
+                    },
+                },
+            });
+            expect(result.properties?.field).not.toHaveProperty(
+                "contentEncoding",
+            );
+            expect(result.properties?.field).not.toHaveProperty(
+                "contentMediaType",
+            );
+            expect(result).not.toHaveProperty("propertyNames");
+            expect(result).not.toHaveProperty("if");
+            expect(result).not.toHaveProperty("then");
+            expect(result).not.toHaveProperty("else");
+        });
+    });
 });

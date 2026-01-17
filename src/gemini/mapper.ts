@@ -18,7 +18,7 @@ export const mapModelToGemini = (model?: string): Gemini.Model => {
 };
 
 export const mapJsonSchemaToGemini = (
-    schema: JsonSchema | unknown
+    schema: JsonSchema | unknown,
 ): JsonSchema => {
     if (!schema || typeof schema !== "object") {
         return schema as JsonSchema;
@@ -30,7 +30,7 @@ export const mapJsonSchemaToGemini = (
     if (schemaObj.definitions) {
         const resolved = resolveJsonSchemaDefinitions(
             schemaObj,
-            schemaObj.definitions
+            schemaObj.definitions,
         );
         return convertJsonSchemaObject(resolved);
     }
@@ -41,7 +41,7 @@ export const mapJsonSchemaToGemini = (
 
 const resolveJsonSchemaDefinitions = (
     schema: JsonSchema,
-    definitions: Record<string, JsonSchema>
+    definitions: Record<string, JsonSchema>,
 ): JsonSchema => {
     if (!schema || typeof schema !== "object") {
         return schema;
@@ -49,7 +49,7 @@ const resolveJsonSchemaDefinitions = (
 
     if (Array.isArray(schema)) {
         return schema.map((item) =>
-            resolveJsonSchemaDefinitions(item as JsonSchema, definitions)
+            resolveJsonSchemaDefinitions(item as JsonSchema, definitions),
         ) as unknown as JsonSchema;
     }
 
@@ -67,7 +67,7 @@ const resolveJsonSchemaDefinitions = (
             if (definitions[refPath]) {
                 return resolveJsonSchemaDefinitions(
                     definitions[refPath],
-                    definitions
+                    definitions,
                 );
             }
         } else if (key === "allOf" && Array.isArray(value)) {
@@ -75,14 +75,14 @@ const resolveJsonSchemaDefinitions = (
             for (const item of value) {
                 const resolved = resolveJsonSchemaDefinitions(
                     item,
-                    definitions
+                    definitions,
                 );
                 Object.assign(result, resolved);
             }
         } else {
             result[key] = resolveJsonSchemaDefinitions(
                 value as JsonSchema,
-                definitions
+                definitions,
             );
         }
     }
@@ -97,15 +97,38 @@ const convertJsonSchemaObject = (schema: JsonSchema): JsonSchema => {
 
     if (Array.isArray(schema)) {
         return schema.map((item) =>
-            convertJsonSchemaObject(item as JsonSchema)
+            convertJsonSchemaObject(item as JsonSchema),
         ) as unknown as JsonSchema;
     }
 
     const result: JsonSchema = {};
 
+    // JSON Schema keywords not supported by Gemini API
+    const unsupportedKeywords = [
+        "definitions",
+        "$schema",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "patternProperties",
+        "dependentSchemas",
+        "dependentRequired",
+        "contentEncoding",
+        "contentMediaType",
+        "contentSchema",
+        "propertyNames",
+        "if",
+        "then",
+        "else",
+        "unevaluatedProperties",
+        "unevaluatedItems",
+        "minContains",
+        "maxContains",
+        "uniqueItems",
+    ];
+
     for (const [key, value] of Object.entries(schema)) {
-        if (key === "definitions" || key === "$schema") {
-            // Skip definitions and $schema in the output
+        if (unsupportedKeywords.includes(key)) {
+            // Skip unsupported JSON Schema keywords
             continue;
         }
 
@@ -129,7 +152,7 @@ const convertJsonSchemaObject = (schema: JsonSchema): JsonSchema => {
             result.properties = {};
             for (const [propKey, propValue] of Object.entries(value)) {
                 result.properties[propKey] = convertJsonSchemaObject(
-                    propValue as JsonSchema
+                    propValue as JsonSchema,
                 );
             }
         } else if (
@@ -155,7 +178,7 @@ const convertJsonSchemaObject = (schema: JsonSchema): JsonSchema => {
             const constValues = localVal
                 .filter(
                     (item) =>
-                        item && typeof item === "object" && "const" in item
+                        item && typeof item === "object" && "const" in item,
                 )
                 .map((item) => (item as JsonSchema).const);
 
@@ -169,7 +192,7 @@ const convertJsonSchemaObject = (schema: JsonSchema): JsonSchema => {
             } else {
                 // Mixed or complex oneOf, use the first type or fallback to string
                 const firstType = localVal.find(
-                    (item) => item && typeof item === "object" && item.type
+                    (item) => item && typeof item === "object" && item.type,
                 );
                 result.type = firstType?.type || "string";
             }
