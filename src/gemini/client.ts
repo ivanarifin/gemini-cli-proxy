@@ -14,8 +14,11 @@ import {
 } from "./auto-model-switching.js";
 import { getLogger, Logger } from "../utils/logger.js";
 import { OAuthRotator } from "../utils/oauth-rotator.js";
-import { getCachedCredentialPath } from "../utils/paths.js";
-import { promises as fs } from "node:fs";
+import {
+    getCachedCredentialPath,
+    getRequestCountsPath,
+} from "../utils/paths.js";
+import { promises as fs, existsSync } from "node:fs";
 import path from "node:path";
 import chalk from "chalk";
 
@@ -26,7 +29,7 @@ export class GeminiApiError extends Error {
     constructor(
         message: string,
         public readonly statusCode: number,
-        public readonly responseText?: string
+        public readonly responseText?: string,
     ) {
         super(message);
         this.name = "GeminiApiError";
@@ -54,7 +57,7 @@ export class GeminiApiClient {
     constructor(
         private readonly authClient: OAuth2Client,
         private readonly googleCloudProject: string | undefined,
-        private readonly disableAutoModelSwitch: boolean
+        private readonly disableAutoModelSwitch: boolean,
     ) {
         this.googleCloudProject = googleCloudProject;
         this.chatID = `chat-${crypto.randomUUID()}`;
@@ -64,6 +67,47 @@ export class GeminiApiClient {
 
         // Eagerly start project discovery to reduce latency on the first request
         void this.discoverProjectId();
+    }
+
+    /**
+     * Increment request count for the current account
+     */
+    private async incrementRequestCount(): Promise<void> {
+        try {
+            const currentAccountPath =
+                OAuthRotator.getInstance().getCurrentAccountPath();
+            let accountId = "default";
+
+            if (currentAccountPath) {
+                accountId = path
+                    .basename(currentAccountPath)
+                    .replace("oauth_creds_", "")
+                    .replace(".json", "");
+            }
+
+            const countsPath = getRequestCountsPath();
+            let counts = {
+                requests: {} as Record<string, number>,
+                lastReset: new Date().toDateString(),
+            };
+
+            if (existsSync(countsPath)) {
+                const data = await fs.readFile(countsPath, "utf-8");
+                counts = JSON.parse(data);
+            }
+
+            const today = new Date().toDateString();
+            if (counts.lastReset !== today) {
+                counts.requests = {};
+                counts.lastReset = today;
+            }
+
+            counts.requests[accountId] = (counts.requests[accountId] || 0) + 1;
+
+            await fs.writeFile(countsPath, JSON.stringify(counts, null, 2));
+        } catch (error) {
+            this.logger.warn("Failed to increment request count", error);
+        }
     }
 
     public get lastThoughtSignature(): string | undefined {
@@ -78,7 +122,7 @@ export class GeminiApiClient {
      * @param sourceFilePath Path to the original OAuth credential file (optional)
      */
     private async reloadCredentials(
-        sourceFilePath?: string | null
+        sourceFilePath?: string | null,
     ): Promise<void> {
         const credentialPath = getCachedCredentialPath();
 
@@ -96,7 +140,7 @@ export class GeminiApiClient {
             // Always trigger token refresh after rotation
             // This ensures the new OAuth credentials have a valid access token
             this.logger.info(
-                "Triggering token refresh after OAuth rotation..."
+                "Triggering token refresh after OAuth rotation...",
             );
             try {
                 // Force refresh by clearing access token first
@@ -112,10 +156,10 @@ export class GeminiApiClient {
                 await fs.writeFile(
                     credentialPath,
                     JSON.stringify(refreshed.credentials, null, 2),
-                    { mode: 0o600 }
+                    { mode: 0o600 },
                 );
                 this.logger.info(
-                    "Refreshed credentials cached to: " + credentialPath
+                    "Refreshed credentials cached to: " + credentialPath,
                 );
 
                 // Also write back to source file if provided
@@ -124,7 +168,7 @@ export class GeminiApiClient {
                         // Merge with existing credential file to preserve other fields
                         const existingContent = await fs.readFile(
                             sourceFilePath,
-                            "utf-8"
+                            "utf-8",
                         );
                         const existingCreds = JSON.parse(existingContent);
                         const updatedCreds = {
@@ -134,17 +178,17 @@ export class GeminiApiClient {
                         await fs.writeFile(
                             sourceFilePath,
                             JSON.stringify(updatedCreds, null, 2),
-                            { mode: 0o600 }
+                            { mode: 0o600 },
                         );
                         this.logger.info(
                             "Refreshed credentials written back to source: " +
-                                sourceFilePath
+                                sourceFilePath,
                         );
                     } catch (sourceError) {
                         this.logger.warn(
                             "Failed to write refreshed credentials to source file: " +
                                 sourceFilePath,
-                            sourceError
+                            sourceError,
                         );
                         // Continue anyway - cache is updated
                     }
@@ -152,7 +196,7 @@ export class GeminiApiClient {
             } catch (refreshError) {
                 this.logger.warn(
                     "Failed to refresh access token after rotation",
-                    refreshError
+                    refreshError,
                 );
                 // Continue anyway - the API call will handle 401 and retry
             }
@@ -187,7 +231,7 @@ export class GeminiApiClient {
                     {
                         cloudaicompanionProject: initialProjectId,
                         metadata: { duetProject: initialProjectId },
-                    }
+                    },
                 )) as Gemini.ProjectDiscoveryResponse;
 
                 if (loadResponse.cloudaicompanionProject) {
@@ -196,7 +240,7 @@ export class GeminiApiClient {
                 }
 
                 const defaultTier = loadResponse.allowedTiers?.find(
-                    (tier) => tier.isDefault
+                    (tier) => tier.isDefault,
                 );
                 const tierId = defaultTier?.id ?? "free-tier";
                 const onboardRequest = {
@@ -211,7 +255,7 @@ export class GeminiApiClient {
                 while (retryCount < MAX_RETRIES) {
                     lroResponse = (await this.callEndpoint(
                         "onboardUser",
-                        onboardRequest
+                        onboardRequest,
                     )) as Gemini.OnboardUserResponse;
                     if (lroResponse.done) {
                         break;
@@ -223,7 +267,7 @@ export class GeminiApiClient {
 
                 if (!lroResponse?.done) {
                     this.logger.warn(
-                        "Project discovery timed out, continuing without project ID"
+                        "Project discovery timed out, continuing without project ID",
                     );
                     return null;
                 }
@@ -235,7 +279,7 @@ export class GeminiApiClient {
                 // Project ID discovery is optional - log warning but don't throw
                 this.logger.warn(
                     "Failed to discover project ID (this is optional)",
-                    error
+                    error,
                 );
                 return null;
             } finally {
@@ -249,7 +293,7 @@ export class GeminiApiClient {
     private async callEndpoint(
         method: string,
         body: Record<string, unknown>,
-        retryCount: number = 0
+        retryCount: number = 0,
     ): Promise<unknown> {
         const { token } = await this.authClient.getAccessToken();
         let response: Response;
@@ -266,13 +310,17 @@ export class GeminiApiClient {
                     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
                     // @ts-ignore - dispatcher is supported in Node.js fetch
                     dispatcher: GeminiApiClient.dispatcher,
-                }
+                },
             );
         } catch (error: any) {
             if (error.name === "TimeoutError" || error.name === "AbortError") {
                 throw new GeminiApiError("Request timed out", 408);
             }
             throw error;
+        }
+
+        if (response.ok) {
+            void this.incrementRequestCount();
         }
 
         if (!response.ok) {
@@ -295,10 +343,10 @@ export class GeminiApiClient {
                     ? path.basename(currentAccount)
                     : "unknown";
                 this.logger.warn(
-                    `Error ${response.status} detected on account ${filename}. Message: ${errorText}`
+                    `Error ${response.status} detected on account ${filename}. Message: ${errorText}`,
                 );
                 this.logger.info(
-                    `Attempting OAuth rotation due to ${response.status}...`
+                    `Attempting OAuth rotation due to ${response.status}...`,
                 );
 
                 try {
@@ -308,7 +356,7 @@ export class GeminiApiClient {
 
                     if (rotatedPath) {
                         this.logger.info(
-                            `OAuth rotation complete, using: ${rotatedPath}`
+                            `OAuth rotation complete, using: ${rotatedPath}`,
                         );
 
                         // Reload credentials from disk after rotation
@@ -319,14 +367,14 @@ export class GeminiApiClient {
                         this.logger.info(
                             `Project ID re-discovered after rotation: ${
                                 newProjectId ?? "none"
-                            }`
+                            }`,
                         );
 
                         // Update the request body with new project ID if discovery succeeded
                         if (newProjectId && body.cloudaicompanionProject) {
                             body.cloudaicompanionProject = newProjectId;
                             this.logger.info(
-                                `Updated request with new project ID: ${newProjectId}`
+                                `Updated request with new project ID: ${newProjectId}`,
                             );
                         }
 
@@ -335,7 +383,7 @@ export class GeminiApiClient {
                             return await this.callEndpoint(
                                 method,
                                 body,
-                                retryCount + 1
+                                retryCount + 1,
                             );
                         } catch (retryError) {
                             // If the retry failed, we check if we should continue rotating
@@ -350,7 +398,7 @@ export class GeminiApiClient {
                                 throw new GeminiApiError(
                                     `All ${accountCount} OAuth accounts have been exhausted. Last error: ${response.status}`,
                                     response.status,
-                                    errorText
+                                    errorText,
                                 );
                             }
                             throw retryError;
@@ -360,7 +408,7 @@ export class GeminiApiClient {
                     // Rotation failed, log and proceed with original error
                     this.logger.error(
                         "OAuth rotation failed, proceeding with original error",
-                        rotationError
+                        rotationError,
                     );
                 }
             }
@@ -370,7 +418,7 @@ export class GeminiApiClient {
                     ? "Request timed out"
                     : `API call failed with status ${response.status}: ${errorText}`,
                 response.status,
-                errorText
+                errorText,
             );
         }
 
@@ -383,7 +431,7 @@ export class GeminiApiClient {
     async getCompletion(
         geminiCompletionRequest: Gemini.ChatCompletionRequest,
         retryCount: number = 0,
-        isExplicitModelRequest: boolean = false
+        isExplicitModelRequest: boolean = false,
     ): Promise<{
         content: string;
         reasoning?: string;
@@ -399,7 +447,7 @@ export class GeminiApiClient {
             for await (const chunk of this.streamContent(
                 geminiCompletionRequest,
                 retryCount,
-                isExplicitModelRequest
+                isExplicitModelRequest,
             )) {
                 chunks.push(chunk);
             }
@@ -442,7 +490,7 @@ export class GeminiApiClient {
                 this.autoSwitcher.isRateLimitError(error.statusCode) &&
                 this.autoSwitcher.shouldAttemptFallback(
                     geminiCompletionRequest.model,
-                    isExplicitModelRequest
+                    isExplicitModelRequest,
                 )
             ) {
                 // Attempt fallback using auto-switching helper
@@ -457,9 +505,9 @@ export class GeminiApiClient {
                         } as Gemini.ChatCompletionRequest;
                         return await this.getCompletion(
                             updatedRequest,
-                            retryCount
+                            retryCount,
                         );
-                    }
+                    },
                 )) as Promise<{
                     content: string;
                     tool_calls?: OpenAI.ToolCall[];
@@ -480,12 +528,12 @@ export class GeminiApiClient {
     async *streamContent(
         geminiCompletionRequest: Gemini.ChatCompletionRequest,
         retryCount: number = 0,
-        isExplicitModelRequest: boolean = false
+        isExplicitModelRequest: boolean = false,
     ): AsyncGenerator<OpenAI.StreamChunk> {
         try {
             yield* this.streamContentInternal(
                 geminiCompletionRequest,
-                retryCount
+                retryCount,
             );
         } catch (error) {
             if (
@@ -494,7 +542,7 @@ export class GeminiApiClient {
                 this.autoSwitcher.isRateLimitError(error.statusCode) &&
                 this.autoSwitcher.shouldAttemptFallback(
                     geminiCompletionRequest.model,
-                    isExplicitModelRequest
+                    isExplicitModelRequest,
                 )
             ) {
                 // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -505,7 +553,7 @@ export class GeminiApiClient {
                     geminiCompletionRequest,
                     async function* (
                         model: string,
-                        data: RetryableRequestData
+                        data: RetryableRequestData,
                     ) {
                         const updatedRequest = {
                             ...data,
@@ -515,14 +563,14 @@ export class GeminiApiClient {
                         const fallbackClient = new GeminiApiClient(
                             self.authClient,
                             self.googleCloudProject,
-                            self.disableAutoModelSwitch
+                            self.disableAutoModelSwitch,
                         );
                         yield* fallbackClient.streamContent(
                             updatedRequest,
-                            retryCount
+                            retryCount,
                         );
                     },
-                    "openai"
+                    "openai",
                 ) as AsyncIterable<OpenAI.StreamChunk>;
                 return;
             }
@@ -535,7 +583,7 @@ export class GeminiApiClient {
      */
     private async *streamContentInternal(
         geminiCompletionRequest: Gemini.ChatCompletionRequest,
-        retryCount: number = 0
+        retryCount: number = 0,
     ): AsyncGenerator<OpenAI.StreamChunk> {
         const { token } = await this.authClient.getAccessToken();
         let response: Response;
@@ -552,13 +600,17 @@ export class GeminiApiClient {
                     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
                     // @ts-ignore - dispatcher is supported in Node.js fetch
                     dispatcher: GeminiApiClient.dispatcher,
-                }
+                },
             );
         } catch (error: any) {
             if (error.name === "TimeoutError" || error.name === "AbortError") {
                 throw new GeminiApiError("Stream request timed out", 408);
             }
             throw error;
+        }
+
+        if (response.ok) {
+            void this.incrementRequestCount();
         }
 
         if (!response.ok) {
@@ -570,12 +622,12 @@ export class GeminiApiClient {
             // Handle 401 errors with token refresh
             if (response.status === 401 && retryCount === 0) {
                 this.logger.info(
-                    "Got 401 error, forcing token refresh and retrying..."
+                    "Got 401 error, forcing token refresh and retrying...",
                 );
                 this.authClient.credentials.access_token = undefined;
                 yield* this.streamContentInternal(
                     geminiCompletionRequest,
-                    retryCount + 1
+                    retryCount + 1,
                 );
                 return;
             }
@@ -594,10 +646,10 @@ export class GeminiApiClient {
                     ? path.basename(currentAccount)
                     : "unknown";
                 this.logger.warn(
-                    `Error ${response.status} detected in stream on account ${filename}. Message: ${errorText}`
+                    `Error ${response.status} detected in stream on account ${filename}. Message: ${errorText}`,
                 );
                 this.logger.info(
-                    `Attempting OAuth rotation in stream due to ${response.status}...`
+                    `Attempting OAuth rotation in stream due to ${response.status}...`,
                 );
 
                 try {
@@ -607,7 +659,7 @@ export class GeminiApiClient {
 
                     if (rotatedPath) {
                         this.logger.info(
-                            `OAuth rotation complete (stream), using: ${rotatedPath}`
+                            `OAuth rotation complete (stream), using: ${rotatedPath}`,
                         );
 
                         // Reload credentials from disk after rotation
@@ -618,14 +670,14 @@ export class GeminiApiClient {
                         this.logger.info(
                             `Project ID re-discovered after rotation: ${
                                 newProjectId ?? "none"
-                            }`
+                            }`,
                         );
 
                         // Update the request with new project ID
                         if (newProjectId) {
                             geminiCompletionRequest.project = newProjectId;
                             this.logger.info(
-                                `Updated stream request with new project ID: ${newProjectId}`
+                                `Updated stream request with new project ID: ${newProjectId}`,
                             );
                         }
 
@@ -633,7 +685,7 @@ export class GeminiApiClient {
                         try {
                             yield* this.streamContentInternal(
                                 geminiCompletionRequest,
-                                retryCount + 1
+                                retryCount + 1,
                             );
                             return;
                         } catch (retryError) {
@@ -647,7 +699,7 @@ export class GeminiApiClient {
                                 throw new GeminiApiError(
                                     `All ${accountCount} OAuth accounts have been exhausted. Last error: ${response.status}`,
                                     response.status,
-                                    errorText
+                                    errorText,
                                 );
                             }
                             throw retryError;
@@ -657,7 +709,7 @@ export class GeminiApiClient {
                     // Rotation failed, log and proceed with original error
                     this.logger.error(
                         "OAuth rotation failed in stream, proceeding with original error",
-                        rotationError
+                        rotationError,
                     );
                 }
             }
@@ -667,7 +719,7 @@ export class GeminiApiClient {
                     ? "Stream request timed out"
                     : `Stream request failed: ${response.status} ${errorText}`,
                 response.status,
-                errorText
+                errorText,
             );
         }
 
@@ -696,7 +748,7 @@ export class GeminiApiClient {
                             }
                             yield this.createOpenAIChunk(
                                 delta,
-                                geminiCompletionRequest.model
+                                geminiCompletionRequest.model,
                             );
                         } else {
                             // Handle regular content
@@ -709,7 +761,7 @@ export class GeminiApiClient {
                             }
                             yield this.createOpenAIChunk(
                                 delta,
-                                geminiCompletionRequest.model
+                                geminiCompletionRequest.model,
                             );
                         }
                         if (part.thoughtSignature) {
@@ -727,7 +779,7 @@ export class GeminiApiClient {
                                     function: {
                                         name: part.functionCall.name,
                                         arguments: JSON.stringify(
-                                            part.functionCall.args
+                                            part.functionCall.args,
                                         ),
                                     },
                                 },
@@ -742,7 +794,7 @@ export class GeminiApiClient {
 
                         yield this.createOpenAIChunk(
                             delta,
-                            geminiCompletionRequest.model
+                            geminiCompletionRequest.model,
                         );
                         if (part.thoughtSignature) {
                             this._lastThoughtSignature = part.thoughtSignature;
@@ -773,7 +825,7 @@ export class GeminiApiClient {
         const finalChunk = this.createOpenAIChunk(
             {},
             geminiCompletionRequest.model,
-            finishReason
+            finishReason,
         );
 
         if (usageData) {
@@ -794,7 +846,7 @@ export class GeminiApiClient {
     private createOpenAIChunk(
         delta: OpenAI.StreamDelta,
         modelId: string,
-        finishReason: string | null = null
+        finishReason: string | null = null,
     ): OpenAI.StreamChunk {
         return {
             id: this.chatID,
@@ -817,7 +869,7 @@ export class GeminiApiClient {
      * Parses a server-sent event (SSE) stream from the Gemini API.
      */
     private async *parseSSEStream(
-        stream: ReadableStream<Uint8Array>
+        stream: ReadableStream<Uint8Array>,
     ): AsyncGenerator<Gemini.Response> {
         const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
         let buffer = "";
@@ -832,7 +884,7 @@ export class GeminiApiClient {
                     } catch (e) {
                         this.logger.error(
                             "Error parsing final SSE JSON object",
-                            e
+                            e,
                         );
                     }
                 }
@@ -851,7 +903,7 @@ export class GeminiApiClient {
                         } catch (e) {
                             this.logger.error(
                                 "Error parsing SSE JSON object",
-                                e
+                                e,
                             );
                         }
                         objectBuffer = "";

@@ -28,16 +28,16 @@ import { Logger, getLogger } from "../utils/logger.js";
 import chalk from "chalk";
 
 // OAuth Client ID used to initiate OAuth2Client class.
-const OAUTH_CLIENT_ID =
+export const OAUTH_CLIENT_ID =
     "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com";
 
 // OAuth Secret value used to initiate OAuth2Client class.
 // Note: It's ok to save this in git because this is an installed application
 // as described here: https://developers.google.com/identity/protocols/oauth2#installed
-const OAUTH_CLIENT_SECRET = "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";
+export const OAUTH_CLIENT_SECRET = "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";
 
 // OAuth Scopes for Cloud Code authorization.
-const OAUTH_SCOPE = [
+export const OAUTH_SCOPE = [
     "https://www.googleapis.com/auth/cloud-platform",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
@@ -54,7 +54,7 @@ const SIGN_IN_FAILURE_URL =
  * as well as a promise that will resolve when the credentials have
  * been refreshed (or which throws error when refreshing credentials failed).
  */
-interface OauthWebLogin {
+export interface OauthWebLogin {
     authUrl: string;
     loginCompletePromise: Promise<void>;
 }
@@ -66,12 +66,12 @@ let userEmail: string | undefined;
  * @returns OAuth2Client with valid credentials
  */
 export async function setupAuthentication(
-    disableBrowserAuth: boolean
+    disableBrowserAuth: boolean,
 ): Promise<OAuth2Client> {
     const logger = getLogger("AUTH", chalk.blue);
     logger.info("setting up Google authentication...");
     logger.info(
-        "if you have not used gemini-cli before, you might be prompted to sign-in"
+        "if you have not used gemini-cli before, you might be prompted to sign-in",
     );
 
     const client = new OAuth2Client({
@@ -95,12 +95,12 @@ export async function setupAuthentication(
             }
         }
         logger.info(
-            `cached credentials loaded for: ${chalk.bold.underline(userEmail)}`
+            `cached credentials loaded for: ${chalk.bold.underline(userEmail)}`,
         );
         logger.info(
             `to use another account, remove ${chalk.underline(
-                "~/.gemini"
-            )} folder and restart server`
+                "~/.gemini",
+            )} folder and restart server`,
         );
         return client;
     }
@@ -115,7 +115,7 @@ export async function setupAuthentication(
                 logger.error(
                     `Failed to authenticate with user code. ${
                         i === maxRetries - 1 ? "" : "Retrying..."
-                    }`
+                    }`,
                 );
             }
         }
@@ -136,13 +136,13 @@ export async function setupAuthentication(
             // Attach an error handler to the returned child process.
             childProcess.on("error", () => {
                 logger.error(
-                    "Failed to open browser automatically. Please try running again with NO_BROWSER=true set."
+                    "Failed to open browser automatically. Please try running again with NO_BROWSER=true set.",
                 );
                 process.exit(1);
             });
         } catch (err) {
             logger.error(
-                "Failed to open browser automatically. Please try running again with NO_BROWSER=true set."
+                "Failed to open browser automatically. Please try running again with NO_BROWSER=true set.",
             );
             if (err instanceof Error) {
                 logger.error(err.message);
@@ -164,9 +164,9 @@ export async function setupAuthentication(
  * @param logger
  * @returns true if authentication was successful
  */
-async function authWithUserCode(
+export async function authWithUserCode(
     client: OAuth2Client,
-    logger: Logger
+    logger: Logger,
 ): Promise<boolean> {
     const redirectUri = "https://codeassist.google.com/authcode";
     const codeVerifier = await client.generateCodeVerifierAsync();
@@ -220,9 +220,9 @@ async function authWithUserCode(
  * @param logger
  * @returns Object containing auth URL and promise
  */
-async function authWithWeb(
+export async function authWithWeb(
     client: OAuth2Client,
-    logger: Logger
+    logger: Logger,
 ): Promise<OauthWebLogin> {
     const port = await getAvailablePort();
     // The hostname used for the HTTP server binding (e.g., '0.0.0.0' in Docker).
@@ -258,8 +258,8 @@ async function authWithWeb(
 
                     reject(
                         new Error(
-                            `Error during authentication: ${qs.get("error")}`
-                        )
+                            `Error during authentication: ${qs.get("error")}`,
+                        ),
                     );
                 } else if (qs.get("state") !== state) {
                     res.end("State mismatch. Possible CSRF attack");
@@ -276,7 +276,7 @@ async function authWithWeb(
                         await fetchAndCacheUserInfo(client, logger);
                     } catch (err) {
                         logger.error(
-                            "Failed to retrieve Google Account ID during authentication"
+                            "Failed to retrieve Google Account ID during authentication",
                         );
                         if (err instanceof Error) {
                             logger.error(err.message);
@@ -321,8 +321,8 @@ function getAvailablePort(): Promise<number> {
                 if (isNaN(port) || port <= 0 || port > 65535) {
                     return reject(
                         new Error(
-                            `Invalid value for OAUTH_CALLBACK_PORT: "${portStr}" `
-                        )
+                            `Invalid value for OAUTH_CALLBACK_PORT: "${portStr}" `,
+                        ),
                     );
                 }
                 return resolve(port);
@@ -349,7 +349,9 @@ function getAvailablePort(): Promise<number> {
  * @param client OAuth2Client instance
  * @returns true if valid credentials were loaded
  */
-async function loadCachedCredentials(client: OAuth2Client): Promise<boolean> {
+export async function loadCachedCredentials(
+    client: OAuth2Client,
+): Promise<boolean> {
     try {
         const keyFile = getCachedCredentialPath();
 
@@ -375,7 +377,7 @@ async function loadCachedCredentials(client: OAuth2Client): Promise<boolean> {
  * Cache credentials to disk
  * @param credentials OAuth credentials
  */
-async function cacheCredentials(credentials: Credentials) {
+export async function cacheCredentials(credentials: Credentials) {
     const filePath = getCachedCredentialPath();
     await fs.mkdir(path.dirname(filePath), { recursive: true });
 
@@ -401,9 +403,9 @@ export async function clearCachedCredentialFile() {
  * @param client OAuth2Client instance
  * @param logger
  */
-async function fetchAndCacheUserInfo(
+export async function fetchAndCacheUserInfo(
     client: OAuth2Client,
-    logger: Logger
+    logger: Logger,
 ): Promise<void> {
     try {
         const { token } = await client.getAccessToken();
@@ -418,14 +420,14 @@ async function fetchAndCacheUserInfo(
                     Authorization: `Bearer ${token}`,
                 },
                 signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-            }
+            },
         );
 
         if (!response.ok) {
             logger.error(
                 `Failed to fetch user info:: ${chalk.bold(
-                    response.status
-                )} ${chalk.bold(response.statusText)}`
+                    response.status,
+                )} ${chalk.bold(response.statusText)}`,
             );
             return;
         }
@@ -446,7 +448,9 @@ async function fetchAndCacheUserInfo(
  * Check if browser launch is suppressed
  * @returns true if browser launch should be suppressed
  */
-function isBrowserLaunchSuppressed(disableBrowserAuth: boolean): boolean {
+export function isBrowserLaunchSuppressed(
+    disableBrowserAuth: boolean,
+): boolean {
     // Check explicit NO_BROWSER flag
     if (disableBrowserAuth) {
         return true;

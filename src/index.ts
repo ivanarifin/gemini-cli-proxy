@@ -14,48 +14,50 @@ import {
 } from "./utils/constant.js";
 import { OAuthRotator } from "./utils/oauth-rotator.js";
 import { getLogger } from "./utils/logger.js";
+import { getAccountsDirPath } from "./utils/paths.js";
+import { existsSync } from "node:fs";
 import chalk from "chalk";
 
 const program = new Command()
     .option("-p, --port <port>", "Server port", DEFAULT_PORT)
     .option(
         "-g --google-cloud-project <googleCloudProject>",
-        process.env.GOOGLE_CLOUD_PROJECT
+        process.env.GOOGLE_CLOUD_PROJECT,
     )
     .option(
         "--disable-browser-auth",
         "Disables browser auth flow and uses code based auth",
-        DISABLE_BROWSER_AUTH
+        DISABLE_BROWSER_AUTH,
     )
     .option(
         "--enable-google-search",
         "Enables native Google Search tool",
-        !DISABLE_GOOGLE_SEARCH
+        !DISABLE_GOOGLE_SEARCH,
     )
     .option(
         "--disable-auto-model-switch",
         "Disables auto model switching in case of rate limiting",
-        DISABLE_AUTO_MODEL_SWITCH
+        DISABLE_AUTO_MODEL_SWITCH,
     )
     .option(
         "--oauth-rotation-paths <paths>",
         "Comma-separated paths to OAuth credential files for rotation",
-        ""
+        "",
     )
     .option(
         "--oauth-rotation-folder <folder>",
         "Path to folder containing OAuth credential files for rotation",
-        ""
+        "",
     )
     .option(
         "--oauth-reset-timezone <offset>",
         "Timezone offset for time-based index reset (e.g., -8 for Pacific Time)",
-        "-8"
+        "-8",
     )
     .option(
         "--oauth-reset-hour <hour>",
         "Hour of day to reset OAuth index (0-23, default 0 for midnight)",
-        "0"
+        "0",
     )
     .parse(process.argv);
 
@@ -80,30 +82,38 @@ export async function startServer() {
         // Initialize OAuth rotation from folder if provided
         if (opts.oauthRotationFolder) {
             await OAuthRotator.getInstance().initializeWithFolder(
-                opts.oauthRotationFolder
+                opts.oauthRotationFolder,
             );
+        } else {
+            // Automatically use managed accounts folder if it exists and has accounts
+            const managedAccountsDir = getAccountsDirPath();
+            if (existsSync(managedAccountsDir)) {
+                await OAuthRotator.getInstance().initializeWithFolder(
+                    managedAccountsDir,
+                );
+            }
         }
 
         // Configure time-based reset if OAuth rotation is enabled
         if (opts.oauthRotationPaths || opts.oauthRotationFolder) {
             const timezoneOffset = parseInt(
                 opts.oauthResetTimezone || "-8",
-                10
+                10,
             );
             const resetHour = parseInt(opts.oauthResetHour || "0", 10);
             OAuthRotator.getInstance().setTimeBasedReset(
                 timezoneOffset,
-                resetHour
+                resetHour,
             );
         }
 
         const authClient = await setupAuthentication(
-            opts.disableBrowserAuth ?? false
+            opts.disableBrowserAuth ?? false,
         );
         const geminiClient = new GeminiApiClient(
             authClient,
             opts.googleCloudProject ?? process.env.GOOGLE_CLOUD_PROJECT,
-            opts.disableAutoModelSwitch
+            opts.disableAutoModelSwitch,
         );
 
         const app = express();
@@ -111,7 +121,7 @@ export async function startServer() {
         // Add request logging middleware
         app.use((req, res, next) => {
             logger.info(
-                `${new Date().toISOString()} - ${req.method} ${req.url}`
+                `${new Date().toISOString()} - ${req.method} ${req.url}`,
             );
             next();
         });
@@ -154,7 +164,7 @@ export async function startServer() {
             res.type("text/plain").send(
                 "Available endpoints:\n" +
                     `* OpenAI compatible endpoint: http://localhost:${opts.port}/openai\n` +
-                    `* Anthropic compatible endpoint: http://localhost:${opts.port}/anthropic`
+                    `* Anthropic compatible endpoint: http://localhost:${opts.port}/anthropic`,
             );
         });
 
@@ -163,13 +173,13 @@ export async function startServer() {
         });
         const openAIRouter = createOpenAIRouter(
             geminiClient,
-            opts.enableGoogleSearch
+            opts.enableGoogleSearch,
         );
         app.use("/openai", openAIRouter);
 
         const anthropicRouter = createAnthropicRouter(
             geminiClient,
-            opts.enableGoogleSearch
+            opts.enableGoogleSearch,
         );
         app.use("/anthropic", anthropicRouter);
 
@@ -177,10 +187,10 @@ export async function startServer() {
         const server = app.listen(opts.port, () => {
             logger.info("server started");
             logger.info(
-                `OpenAI compatible endpoint: http://localhost:${opts.port}/openai`
+                `OpenAI compatible endpoint: http://localhost:${opts.port}/openai`,
             );
             logger.info(
-                `Anthropic compatible endpoint: http://localhost:${opts.port}/anthropic`
+                `Anthropic compatible endpoint: http://localhost:${opts.port}/anthropic`,
             );
             logger.info("press Ctrl+C to stop the server");
         });

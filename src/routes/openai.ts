@@ -8,7 +8,7 @@ import chalk from "chalk";
 
 export function createOpenAIRouter(
     geminiClient: GeminiApiClient,
-    enableGoogleSearch: boolean = false
+    enableGoogleSearch: boolean = false,
 ): express.Router {
     const router = express.Router();
     const logger = getLogger("SERVER-OPENAI", chalk.green);
@@ -28,12 +28,12 @@ export function createOpenAIRouter(
         }));
 
         // Add "auto" model for explicit auto-switching requests
-        modelData.push({
-            id: "auto",
-            object: "model",
-            created: Math.floor(Date.now() / 1000),
-            owned_by: "Google",
-        });
+        // modelData.push({
+        //     id: "auto",
+        //     object: "model",
+        //     created: Math.floor(Date.now() / 1000),
+        //     owned_by: "Google",
+        // });
 
         res.json({
             object: "list",
@@ -54,7 +54,7 @@ export function createOpenAIRouter(
             // Intelligent Model Passthrough: Check if a specific model was requested
             // Only trigger auto-switch if model is "auto", null, missing, or empty string
             const isExplicitModelRequest = Boolean(
-                body.model && body.model !== "auto" && body.model.trim() !== ""
+                body.model && body.model !== "auto" && body.model.trim() !== "",
             );
 
             const geminiCompletionRequest =
@@ -62,7 +62,7 @@ export function createOpenAIRouter(
                     projectId ?? undefined,
                     body,
                     enableGoogleSearch,
-                    geminiClient.lastThoughtSignature // Pass the last thought signature
+                    geminiClient.lastThoughtSignature, // Pass the last thought signature
                 );
 
             if (body.stream) {
@@ -71,7 +71,7 @@ export function createOpenAIRouter(
                 res.setHeader("Connection", "keep-alive");
                 res.setHeader(
                     "Access-Control-Allow-Headers",
-                    "Content-Type, Authorization"
+                    "Content-Type, Authorization",
                 );
                 res.setHeader("Access-Control-Allow-Origin", "*");
 
@@ -84,7 +84,7 @@ export function createOpenAIRouter(
                         const geminiStream = geminiClient.streamContent(
                             geminiCompletionRequest,
                             0, // retryCount
-                            isExplicitModelRequest // Pass explicit model request flag
+                            isExplicitModelRequest, // Pass explicit model request flag
                         );
                         for await (const chunk of geminiStream) {
                             await writer.write(chunk);
@@ -111,7 +111,7 @@ export function createOpenAIRouter(
                     const completion = await geminiClient.getCompletion(
                         geminiCompletionRequest,
                         0, // retryCount
-                        isExplicitModelRequest // Pass explicit model request flag
+                        isExplicitModelRequest, // Pass explicit model request flag
                     );
 
                     // Build message content - include reasoning if present
@@ -171,7 +171,7 @@ export function createOpenAIRouter(
                         if (completionError.responseText) {
                             try {
                                 const parsed = JSON.parse(
-                                    completionError.responseText
+                                    completionError.responseText,
                                 );
                                 if (parsed.error) {
                                     errorDetails = parsed.error;
