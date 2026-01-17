@@ -74,16 +74,11 @@ export type TextPart = {
     thoughtSignature?: string;
 };
 
-export type ThoughtPart = {
-    thought: string;
-};
-
 export type Part =
     | TextPart
     | InlineDataPart
     | FunctionCallPart
-    | FunctionResponsePart
-    | ThoughtPart;
+    | FunctionResponsePart;
 
 export type ThinkingConfig = {
     thinkingBudget: number;
