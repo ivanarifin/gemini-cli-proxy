@@ -18,6 +18,13 @@ import { getAccountsDirPath } from "./utils/paths.js";
 import { existsSync } from "node:fs";
 import chalk from "chalk";
 
+// Antigravity imports
+import { setupAntigravityAuthentication } from "./antigravity/auth.js";
+import { AntigravityApiClient } from "./antigravity/client.js";
+import { createAntigravityRouter } from "./antigravity/router.js";
+import { AntigravityOAuthRotator } from "./antigravity/oauth-rotator.js";
+import { getAntigravityAccountsDirPath } from "./antigravity/paths.js";
+
 const program = new Command()
     .option("-p, --port <port>", "Server port", DEFAULT_PORT)
     .option(
@@ -59,6 +66,17 @@ const program = new Command()
         "Hour of day to reset OAuth index (0-23, default 0 for midnight)",
         "0",
     )
+    // Antigravity-specific options
+    .option(
+        "--antigravity-oauth-rotation-folder <folder>",
+        "Path to folder containing Antigravity OAuth credential files for rotation",
+        "",
+    )
+    .option(
+        "--disable-antigravity",
+        "Disable Antigravity endpoint",
+        false,
+    )
     .parse(process.argv);
 
 const opts = program.opts();
@@ -68,7 +86,7 @@ export async function startServer() {
     logger.info("starting server...");
 
     try {
-        // Initialize OAuth rotation if paths or folder are provided
+        // Initialize Gemini CLI OAuth rotation if paths or folder are provided
         if (opts.oauthRotationPaths) {
             const paths = opts.oauthRotationPaths
                 .split(",")
@@ -79,7 +97,7 @@ export async function startServer() {
             }
         }
 
-        // Initialize OAuth rotation from folder if provided
+        // Initialize Gemini CLI OAuth rotation from folder if provided
         if (opts.oauthRotationFolder) {
             await OAuthRotator.getInstance().initializeWithFolder(
                 opts.oauthRotationFolder,
@@ -94,7 +112,7 @@ export async function startServer() {
             }
         }
 
-        // Configure time-based reset if OAuth rotation is enabled
+        // Configure time-based reset for Gemini CLI OAuth rotation
         if (opts.oauthRotationPaths || opts.oauthRotationFolder) {
             const timezoneOffset = parseInt(
                 opts.oauthResetTimezone || "-8",
@@ -107,6 +125,40 @@ export async function startServer() {
             );
         }
 
+        // Antigravity is enabled by default, check if disabled
+        const antigravityEnabled = !opts.disableAntigravity;
+
+        // Initialize Antigravity OAuth rotation if enabled
+        if (antigravityEnabled) {
+            if (opts.antigravityOauthRotationFolder) {
+                await AntigravityOAuthRotator.getInstance().initializeWithFolder(
+                    opts.antigravityOauthRotationFolder,
+                );
+            } else {
+                // Automatically use Antigravity managed accounts folder if it exists
+                const antigravityAccountsDir = getAntigravityAccountsDirPath();
+                if (existsSync(antigravityAccountsDir)) {
+                    await AntigravityOAuthRotator.getInstance().initializeWithFolder(
+                        antigravityAccountsDir,
+                    );
+                }
+            }
+
+            // Configure time-based reset for Antigravity OAuth rotation
+            if (opts.antigravityOauthRotationFolder) {
+                const timezoneOffset = parseInt(
+                    opts.oauthResetTimezone || "-8",
+                    10,
+                );
+                const resetHour = parseInt(opts.oauthResetHour || "0", 10);
+                AntigravityOAuthRotator.getInstance().setTimeBasedReset(
+                    timezoneOffset,
+                    resetHour,
+                );
+            }
+        }
+
+        // Setup Gemini CLI authentication
         const authClient = await setupAuthentication(
             opts.disableBrowserAuth ?? false,
         );
@@ -115,6 +167,20 @@ export async function startServer() {
             opts.googleCloudProject ?? process.env.GOOGLE_CLOUD_PROJECT,
             opts.disableAutoModelSwitch,
         );
+
+        // Setup Antigravity authentication if enabled
+        let antigravityClient: AntigravityApiClient | null = null;
+        if (antigravityEnabled) {
+            logger.info("Setting up Antigravity authentication...");
+            const antigravityAuthClient = await setupAntigravityAuthentication(
+                opts.disableBrowserAuth ?? false,
+            );
+            antigravityClient = new AntigravityApiClient(
+                antigravityAuthClient,
+                opts.googleCloudProject ?? process.env.GOOGLE_CLOUD_PROJECT,
+                opts.disableAutoModelSwitch,
+            );
+        }
 
         const app = express();
 
@@ -161,16 +227,27 @@ export async function startServer() {
         });
 
         app.get("/", (_req, res) => {
+            const endpoints = [
+                `* OpenAI compatible endpoint (Gemini CLI): http://localhost:${opts.port}/openai`,
+                `* Anthropic compatible endpoint (Gemini CLI): http://localhost:${opts.port}/anthropic`,
+            ];
+
+            if (antigravityEnabled) {
+                endpoints.push(
+                    `* Antigravity endpoint (Claude/Gemini 3): http://localhost:${opts.port}/antigravity`,
+                );
+            }
+
             res.type("text/plain").send(
-                "Available endpoints:\n" +
-                    `* OpenAI compatible endpoint: http://localhost:${opts.port}/openai\n` +
-                    `* Anthropic compatible endpoint: http://localhost:${opts.port}/anthropic`,
+                "Available endpoints:\n" + endpoints.join("\n"),
             );
         });
 
         app.get("/health", (_req, res) => {
             res.status(200).json({ status: "ok" });
         });
+
+        // Gemini CLI endpoints
         const openAIRouter = createOpenAIRouter(
             geminiClient,
             opts.enableGoogleSearch,
@@ -183,15 +260,29 @@ export async function startServer() {
         );
         app.use("/anthropic", anthropicRouter);
 
-        // 6. Start server
+        // Antigravity endpoint (enabled by default)
+        if (antigravityEnabled && antigravityClient) {
+            const antigravityRouter = createAntigravityRouter(
+                antigravityClient,
+                opts.enableGoogleSearch,
+            );
+            app.use("/antigravity", antigravityRouter);
+        }
+
+        // Start server
         const server = app.listen(opts.port, () => {
             logger.info("server started");
             logger.info(
-                `OpenAI compatible endpoint: http://localhost:${opts.port}/openai`,
+                `OpenAI compatible endpoint (Gemini CLI): http://localhost:${opts.port}/openai`,
             );
             logger.info(
-                `Anthropic compatible endpoint: http://localhost:${opts.port}/anthropic`,
+                `Anthropic compatible endpoint (Gemini CLI): http://localhost:${opts.port}/anthropic`,
             );
+            if (antigravityEnabled) {
+                logger.info(
+                    `Antigravity endpoint (Claude/Gemini 3): http://localhost:${opts.port}/antigravity`,
+                );
+            }
             logger.info("press Ctrl+C to stop the server");
         });
 
@@ -205,6 +296,9 @@ export async function startServer() {
 
             // Clean up OAuth rotator resources
             OAuthRotator.getInstance().dispose();
+            if (antigravityEnabled) {
+                AntigravityOAuthRotator.getInstance().dispose();
+            }
 
             server.close(() => {
                 logger.info("Server closed.");

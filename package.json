@@ -18,7 +18,11 @@
         "auth:list": "node --loader ts-node/esm src/auth/cli.ts list",
         "auth:add": "node --loader ts-node/esm src/auth/cli.ts add",
         "auth:remove": "node --loader ts-node/esm src/auth/cli.ts remove",
-        "auth:counts": "node --loader ts-node/esm src/auth/cli.ts counts"
+        "auth:counts": "node --loader ts-node/esm src/auth/cli.ts counts",
+        "antigravity:list": "node --loader ts-node/esm src/antigravity/cli.ts list",
+        "antigravity:add": "node --loader ts-node/esm src/antigravity/cli.ts add",
+        "antigravity:remove": "node --loader ts-node/esm src/antigravity/cli.ts remove",
+        "antigravity:counts": "node --loader ts-node/esm src/antigravity/cli.ts counts"
     },
     "engines": {
         "node": ">20.0.0"
