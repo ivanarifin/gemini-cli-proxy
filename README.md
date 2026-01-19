@@ -14,7 +14,7 @@ Gemini CodeAssist does not provide direct access to Gemini models which limits y
 
 ## Quick Start
 
-`npx gemini-cli-proxy`
+`yarn dev`
 
 The server will start on `http://localhost:3000`
 
@@ -24,7 +24,7 @@ The server will start on `http://localhost:3000`
 ### Usage
 
 ```bash
-npx gemini-cli-proxy [options]
+yarn dev [options]
 ```
 
 Options:
@@ -129,7 +129,27 @@ Add the following to the Zed config file
 
 To enable automatic OAuth token rotation when rate limits (HTTP 429) are encountered:
 
-### Method 1: Using Individual File Paths
+### Method 1: Using Auth CLI (Recommended)
+
+The easiest way to manage multiple accounts is using the built-in auth CLI:
+
+```bash
+# Add a new account with a specific ID
+yarn auth:add account1
+
+# List all authenticated accounts and their status
+yarn auth:list
+
+# Check request counts for all accounts
+yarn auth:counts
+
+# Remove an account
+yarn auth:remove account1
+```
+
+All accounts added via `yarn auth:add` are automatically stored in `~/.gemini/accounts/` and will be used for rotation if the server is started with `--oauth-rotation-folder ~/.gemini/accounts`.
+
+### Method 2: Using Individual File Paths
 
 1. Create multiple OAuth credential files by authenticating with different Google accounts
 2. Save each credential file (e.g., `~/.gemini/oauth_creds.json`) to different locations
@@ -139,22 +159,17 @@ To enable automatic OAuth token rotation when rate limits (HTTP 429) are encount
 gemini-cli-proxy --oauth-rotation-paths "/path/to/acc1.json,/path/to/acc2.json,/path/to/acc3.json"
 ```
 
-### Method 2: Using a Folder (Recommended)
+### Method 3: Using a Folder
 
 1. Create a folder and save all OAuth credential files in it
 2. Start the server with `--oauth-rotation-folder` option:
 
 ```bash
-# Create folder and add your OAuth credential files
-mkdir -p /path/to/oauth-accounts
-cp ~/.gemini/oauth_creds.json /path/to/oauth-accounts/account1.json
-# Add more accounts as needed...
-
 # Start server with folder-based rotation
-gemini-cli-proxy --oauth-rotation-folder "/path/to/oauth-accounts"
+gemini-cli-proxy --oauth-rotation-folder "~/.gemini/accounts"
 ```
 
-**Benefits of folder-based rotation:**
+**Benefits of rotation:**
 
 - No need to restart when adding new accounts - just add JSON files to the folder
 - All accounts are automatically discovered and rotated
@@ -182,10 +197,14 @@ When a 429 error is detected:
 
 ### Scripts
 
-- `npm run dev` - Start development server with hot reload
-- `npm run build` - Build TypeScript to JavaScript
-- `npm start` - Start production server
-- `npm run lint` - Run ESLint
+- `yarn dev` - Start development server with hot reload
+- `yarn build` - Build TypeScript to JavaScript
+- `yarn start` - Start production server
+- `yarn lint` - Run ESLint
+- `yarn auth:list` - List all authenticated accounts
+- `yarn auth:add <id>` - Add a new account
+- `yarn auth:remove <id>` - Remove an account
+- `yarn auth:counts` - Check request counts for all accounts
 
 ### Project Structure
 
